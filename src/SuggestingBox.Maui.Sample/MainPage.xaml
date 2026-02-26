@@ -1,0 +1,37 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:suggestingBox="clr-namespace:SuggestingBox.Maui;assembly=SuggestingBox.Maui"
+             x:Class="SuggestingBox.Maui.Sample.MainPage"
+             Title="SuggestingBox Sample">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="16">
+
+            <Label Text="SuggestingBox Demo"
+                   FontSize="24"
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center" />
+
+            <Label Text="Type @ for email suggestions or # for hashtag suggestions"
+                   FontSize="14"
+                   TextColor="Gray" />
+
+            <suggestingBox:SuggestingBox
+                x:Name="SuggestingBoxControl"
+                Prefixes="@#"
+                Placeholder="Start typing with @ or #..."
+                MaxSuggestionHeight="200">
+                <suggestingBox:SuggestingBox.ItemTemplate>
+                    <DataTemplate>
+                        <VerticalStackLayout Padding="8,4">
+                            <Label Text="{Binding .}" />
+                        </VerticalStackLayout>
+                    </DataTemplate>
+                </suggestingBox:SuggestingBox.ItemTemplate>
+            </suggestingBox:SuggestingBox>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>
