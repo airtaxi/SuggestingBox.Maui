@@ -14,8 +14,8 @@ public partial class MainPage : ContentPage
         new("ASPNET"),
         new("EntityFramework"),
         new("WinUI"),
-        new("댕댕3이 3"),
-        new("멍멍4이 4"),
+        new("댕댕이"),
+        new("멍멍이"),
         new("Azure"),
         new("TypeScript")
     ];
@@ -26,8 +26,7 @@ public partial class MainPage : ContentPage
         new("Jane Smith", "jane@example.com"),
         new("Bob Johnson", "bob@example.com"),
         new("Alice Williams", "alice@example.com"),
-        new("이호2원 2", "hoyo321@naver.com"),
-        new("박성현", "ayanoquasar@naver.com"),
+        new("이호원", "hoyo321@naver.com"),
         new("Charlie Brown", "charlie@example.com")
     ];
 
