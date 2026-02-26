@@ -1,5 +1,6 @@
 using Foundation;
 using UIKit;
+using CoreGraphics;
 using Microsoft.Maui.Platform;
 
 namespace SuggestingBox.Maui;
@@ -74,4 +75,59 @@ internal static partial class TextFormatter
         typingAttributes.Remove(UIStringAttributeKey.BackgroundColor);
         textView.TypingAttributes2 = typingAttributes;
     }
+
+    internal static partial double GetNativeContentHeight(CollectionView collectionView)
+    {
+        UICollectionView nativeView = TryGetNativeCollectionView(collectionView);
+        if (nativeView is null)
+            return 0;
+
+        nativeView.LayoutIfNeeded();
+        if (nativeView.NumberOfSections() <= 0 || nativeView.Bounds.Width <= 0)
+            return 0;
+
+        var layoutAttributes = nativeView.CollectionViewLayout.LayoutAttributesForElementsInRect(
+            new CGRect(0, 0, nativeView.Bounds.Width, nfloat.MaxValue));
+        if (layoutAttributes is null || layoutAttributes.Length == 0)
+            return 0;
+
+        nfloat maxBottom = 0;
+        foreach (var layoutAttribute in layoutAttributes)
+        {
+            if (layoutAttribute.RepresentedElementCategory != UICollectionElementCategory.Cell) continue;
+            if (layoutAttribute.Frame.GetMaxY() > maxBottom)
+                maxBottom = layoutAttribute.Frame.GetMaxY();
+        }
+
+        return maxBottom > 0 ? maxBottom : nativeView.ContentSize.Height;
+    }
+
+    private static UICollectionView TryGetNativeCollectionView(CollectionView collectionView)
+    {
+        if (collectionView.Handler?.PlatformView is UICollectionView nativeCollectionView)
+            return nativeCollectionView;
+
+        if (collectionView.Handler?.PlatformView is not UIView platformRootView)
+            return null;
+
+        return FindCollectionViewDescendant(platformRootView);
+    }
+
+    private static UICollectionView FindCollectionViewDescendant(UIView view)
+    {
+        if (view is UICollectionView nativeCollectionView)
+            return nativeCollectionView;
+
+        foreach (UIView subview in view.Subviews)
+        {
+            UICollectionView foundCollectionView = FindCollectionViewDescendant(subview);
+            if (foundCollectionView is not null)
+                return foundCollectionView;
+        }
+
+        return null;
+    }
+
+    internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved) { }
+    internal static partial void UnsubscribeCursorChanged(Editor editor) { }
 }

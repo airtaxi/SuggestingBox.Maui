@@ -47,6 +47,16 @@ internal static partial class TextFormatter
 
     internal static partial void ResetNativeText(Editor editor, string text, int cursorPosition) { }
 
+    internal static partial double GetNativeContentHeight(CollectionView collectionView)
+    {
+        if (collectionView.Handler?.PlatformView is not AndroidX.RecyclerView.Widget.RecyclerView recyclerView)
+            return 0;
+
+        float density = recyclerView.Context?.Resources?.DisplayMetrics?.Density ?? 1f;
+        int scrollRange = recyclerView.ComputeVerticalScrollRange();
+        return scrollRange > 0 ? scrollRange / density : 0;
+    }
+
     private static void ClearSpans<T>(ISpannable spannable) where T : Java.Lang.Object
     {
         var existing = spannable.GetSpans(0, spannable.Length(), Java.Lang.Class.FromType(typeof(T)));
@@ -54,4 +64,7 @@ internal static partial class TextFormatter
         foreach (var span in existing)
             spannable.RemoveSpan(span);
     }
+
+    internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved) { }
+    internal static partial void UnsubscribeCursorChanged(Editor editor) { }
 }

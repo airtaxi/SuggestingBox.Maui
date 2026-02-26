@@ -15,6 +15,8 @@ public class SuggestingBox : ContentView
     private bool isUpdatingText;
     private int textChangeGeneration;
     private bool hasPendingTokenDeletion;
+    private double measuredItemHeight;
+    private int lastKnownCursorPosition = -1;
 
     public static readonly BindableProperty PrefixesProperty =
         BindableProperty.Create(nameof(Prefixes), typeof(string), typeof(SuggestingBox), string.Empty);
@@ -37,7 +39,7 @@ public class SuggestingBox : ContentView
 
     public static readonly BindableProperty MaxSuggestionHeightProperty =
         BindableProperty.Create(nameof(MaxSuggestionHeight), typeof(double), typeof(SuggestingBox), 200.0,
-            propertyChanged: OnMaxSuggestionHeightChanged);
+            propertyChanged: OnSuggestionHeightPropertyChanged);
 
     public string Prefixes
     {
@@ -87,11 +89,12 @@ public class SuggestingBox : ContentView
             VerticalOptions = LayoutOptions.Start
         };
         editor.TextChanged += OnEditorTextChanged;
+        editor.PropertyChanged += OnEditorPropertyChanged;
+        editor.HandlerChanged += OnEditorHandlerChanged;
 
         suggestionListView = new CollectionView
         {
             SelectionMode = SelectionMode.Single,
-            HeightRequest = 200,
             VerticalOptions = LayoutOptions.Start
         };
         suggestionListView.SelectionChanged += OnSuggestionSelected;
@@ -119,6 +122,44 @@ public class SuggestingBox : ContentView
 
         if (Application.Current is Application application)
             application.RequestedThemeChanged += OnThemeChanged;
+    }
+
+    private void OnEditorHandlerChanged(object sender, EventArgs e)
+    {
+        if (editor.Handler is not null)
+            TextFormatter.SubscribeCursorChanged(editor, OnNativeCursorChanged);
+        else
+            TextFormatter.UnsubscribeCursorChanged(editor);
+    }
+
+    private void OnNativeCursorChanged(int previousPosition, int newPosition)
+    {
+        if (isUpdatingText || hasPendingTokenDeletion || tokens.Count == 0) return;
+
+        string text = editor.Text ?? string.Empty;
+        var tokenAtCursor = tokens.FirstOrDefault(
+            token => newPosition > token.StartIndex && newPosition < token.EndIndex);
+
+        if (tokenAtCursor is null) return;
+
+        bool movingLeft = previousPosition > newPosition || previousPosition < 0;
+        int targetCursor = movingLeft
+            ? tokenAtCursor.StartIndex
+            : tokenAtCursor.EndIndex;
+
+        if (!movingLeft && targetCursor < text.Length && text[targetCursor] == ' ')
+            targetCursor++;
+
+        int finalCursor = Math.Min(targetCursor, text.Length);
+
+        // WinUI ignores Selection.SetRange calls made synchronously inside a SelectionChanged handler,
+        // so defer to the next frame.
+        isUpdatingText = true;
+        Dispatcher.Dispatch(() =>
+        {
+            TextFormatter.ResetNativeText(editor, text, finalCursor);
+            isUpdatingText = false;
+        });
     }
 
     public IEnumerable<object> GetSuggestion()
@@ -192,19 +233,65 @@ public class SuggestingBox : ContentView
             ScheduleFormatting();
     }
 
+    private void OnEditorPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName != nameof(Editor.CursorPosition)) return;
+        if (isUpdatingText || hasPendingTokenDeletion || tokens.Count == 0) return;
+
+        int previousCursor = lastKnownCursorPosition;
+        lastKnownCursorPosition = editor.CursorPosition;
+
+        // Defer to the next frame so any concurrent text change (e.g. backspace) can set
+        // hasPendingTokenDeletion first. Without this, on iOS the cursor push fires before
+        // HandleTokenDeletion, which corrupts the cursor state and causes it to get stuck.
+        Dispatcher.Dispatch(() =>
+        {
+            if (isUpdatingText || hasPendingTokenDeletion || tokens.Count == 0) return;
+
+            int cursorPosition = editor.CursorPosition;
+            string text = editor.Text ?? string.Empty;
+
+            var tokenAtCursor = tokens.FirstOrDefault(
+                token => cursorPosition > token.StartIndex && cursorPosition < token.EndIndex);
+
+            if (tokenAtCursor is null) return;
+
+            // Detect direction: moving left pushes to token start, moving right pushes past token end
+            bool movingLeft = previousCursor > cursorPosition;
+            int targetCursor = movingLeft
+                ? tokenAtCursor.StartIndex
+                : tokenAtCursor.EndIndex;
+
+            if (!movingLeft && targetCursor < text.Length && text[targetCursor] == ' ')
+                targetCursor++;
+
+            isUpdatingText = true;
+            editor.CursorPosition = Math.Min(targetCursor, text.Length);
+            lastKnownCursorPosition = editor.CursorPosition;
+            isUpdatingText = false;
+        });
+    }
+
+
     private bool HandleTokenDeletion(string oldText, string newText)
     {
         if (tokens.Count == 0) return false;
 
-        // Pure insertion inside or at the end of a token: reject the edit and
         // move the cursor past the token boundary (tokens are immutable).
         if (newText.Length > oldText.Length)
         {
-            var (insertPosition, _, _) = FindEditRegion(oldText, newText);
+            var (insertPosition, _, insertedLength) = FindEditRegion(oldText, newText);
             var targetToken = tokens.FirstOrDefault(
                 token => insertPosition > token.StartIndex && insertPosition <= token.EndIndex);
 
             if (targetToken is null) return false;
+
+            // Allow whitespace inserted exactly at the token end boundary — it falls outside
+            // the visible token and does not inherit the token's styling after ScheduleFormatting.
+            if (insertPosition == targetToken.EndIndex
+                && insertedLength > 0
+                && newText.Substring(insertPosition, insertedLength).All(char.IsWhiteSpace))
+                return false;
 
             int cursorAfterToken = targetToken.EndIndex;
             if (cursorAfterToken < oldText.Length && oldText[cursorAfterToken] == ' ')
@@ -267,6 +354,8 @@ public class SuggestingBox : ContentView
             editor.Text = resultText;
             editor.CursorPosition = cursorPosition;
             Text = resultText;
+            TextFormatter.ResetNativeText(editor, resultText, cursorPosition);
+            lastKnownCursorPosition = cursorPosition;
             isUpdatingText = false;
             ScheduleFormatting();
         });
@@ -389,6 +478,7 @@ public class SuggestingBox : ContentView
             editor.Text = newText;
             Text = newText;
             editor.CursorPosition = Math.Min(cursorAfterToken, newText.Length);
+            TextFormatter.ResetNativeText(editor, newText, Math.Min(cursorAfterToken, newText.Length));
             isUpdatingText = false;
 
             ScheduleFormatting();
@@ -477,12 +567,52 @@ public class SuggestingBox : ContentView
             itemsSource = itemsSource.Cast<object>().ToList();
 
         suggestingBox.suggestionListView.ItemsSource = itemsSource;
+        suggestingBox.UpdateSuggestionHeight(itemsSource);
+    }
+
+    private void UpdateSuggestionHeight(IEnumerable itemsSource)
+    {
+        int itemCount = itemsSource is ICollection collection ? collection.Count : 0;
+        if (itemCount == 0)
+        {
+            suggestionListView.HeightRequest = 0;
+            return;
+        }
+
+        if (measuredItemHeight > 0)
+        {
+            suggestionListView.HeightRequest = Math.Min(itemCount * measuredItemHeight, MaxSuggestionHeight);
+            return;
+        }
+
+        // First measurement: set to max height so all items are rendered, then measure actual content height
+        suggestionListView.HeightRequest = MaxSuggestionHeight;
+
+        // Subscribe to SizeChanged — fires after the CollectionView is fully rendered (more reliable than Dispatch)
+        suggestionListView.SizeChanged += OnSuggestionListSizeChangedForMeasurement;
+    }
+
+    private void OnSuggestionListSizeChangedForMeasurement(object sender, EventArgs e)
+    {
+        suggestionListView.SizeChanged -= OnSuggestionListSizeChangedForMeasurement;
+
+        IEnumerable source = suggestionListView.ItemsSource;
+        int itemCount = source is ICollection collection ? collection.Count : 0;
+        if (itemCount == 0) return;
+
+        double contentHeight = TextFormatter.GetNativeContentHeight(suggestionListView);
+        if (contentHeight > 0)
+        {
+            measuredItemHeight = contentHeight / itemCount;
+            suggestionListView.HeightRequest = Math.Min(contentHeight, MaxSuggestionHeight);
+        }
     }
 
     private static void OnItemTemplateChanged(BindableObject bindable, object oldValue, object newValue)
     {
         if (bindable is not SuggestingBox suggestingBox) return;
         suggestingBox.suggestionListView.ItemTemplate = newValue as DataTemplate;
+        suggestingBox.measuredItemHeight = 0;
     }
 
     private static void OnTextPropertyChanged(BindableObject bindable, object oldValue, object newValue)
@@ -500,9 +630,9 @@ public class SuggestingBox : ContentView
         suggestingBox.editor.Placeholder = newValue as string ?? string.Empty;
     }
 
-    private static void OnMaxSuggestionHeightChanged(BindableObject bindable, object oldValue, object newValue)
+    private static void OnSuggestionHeightPropertyChanged(BindableObject bindable, object oldValue, object newValue)
     {
         if (bindable is not SuggestingBox suggestingBox) return;
-        suggestingBox.suggestionListView.HeightRequest = (double)newValue;
+        suggestingBox.UpdateSuggestionHeight(suggestingBox.suggestionListView.ItemsSource);
     }
 }

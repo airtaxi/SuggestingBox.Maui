@@ -1,5 +1,6 @@
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml;
 using WinFormatEffect = Microsoft.UI.Text.FormatEffect;
 
 namespace SuggestingBox.Maui;
@@ -62,5 +63,80 @@ internal static partial class TextFormatter
         }
     }
 
-    internal static partial void ResetNativeText(Editor editor, string text, int cursorPosition) { }
+    internal static partial void ResetNativeText(Editor editor, string text, int cursorPosition)
+    {
+        if (editor.Handler?.PlatformView is not RichEditBox richEditBox) return;
+
+        // Set cursor position directly on the native RichEditBox — MAUI's editor.CursorPosition
+        // assignment on Windows sometimes lands at the wrong position (e.g. right after # or @)
+        // because the handler defers or clamps the position.
+        richEditBox.Document.Selection.SetRange(
+            Math.Min(cursorPosition, text.Length),
+            Math.Min(cursorPosition, text.Length));
+    }
+
+    private static readonly Dictionary<Editor, (RichEditBox richEditBox, RoutedEventHandler handler)>
+        cursorHandlers = [];
+
+    internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved)
+    {
+        if (editor.Handler?.PlatformView is not RichEditBox richEditBox) return;
+
+        int previousPosition = -1;
+
+        void selectionChangedHandler(object sender, RoutedEventArgs e)
+        {
+            var selection = richEditBox.Document.Selection;
+            if (selection.StartPosition != selection.EndPosition) return;
+
+            int newPosition = selection.StartPosition;
+            int previous = previousPosition;
+            previousPosition = newPosition;
+            onCursorMoved(previous, newPosition);
+        }
+
+        richEditBox.SelectionChanged += selectionChangedHandler;
+        cursorHandlers[editor] = (richEditBox, selectionChangedHandler);
+    }
+
+    internal static partial void UnsubscribeCursorChanged(Editor editor)
+    {
+        if (!cursorHandlers.TryGetValue(editor, out var entry)) return;
+        entry.richEditBox.SelectionChanged -= entry.handler;
+        cursorHandlers.Remove(editor);
+    }
+
+    internal static partial double GetNativeContentHeight(CollectionView collectionView)
+    {
+        if (collectionView.Handler?.PlatformView is not FrameworkElement platformView)
+            return 0;
+
+        // Walk the visual tree to find the inner ScrollViewer that WinUI uses for CollectionView.
+        // Its ScrollableHeight + ViewportHeight gives actual content height.
+        ScrollViewer scrollViewer = FindDescendant<ScrollViewer>(platformView);
+        if (scrollViewer is null || scrollViewer.ExtentHeight <= 0)
+            return 0;
+
+        double density = collectionView.Handler.MauiContext?.Services
+            .GetService<Microsoft.Maui.Devices.IDeviceDisplay>()?.MainDisplayInfo.Density ?? 1.0;
+
+        return scrollViewer.ExtentHeight / density;
+    }
+
+    private static T FindDescendant<T>(DependencyObject parent) where T : DependencyObject
+    {
+        int childCount = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent);
+        for (int index = 0; index < childCount; index++)
+        {
+            DependencyObject child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, index);
+            if (child is T typedChild)
+                return typedChild;
+
+            T descendant = FindDescendant<T>(child);
+            if (descendant is not null)
+                return descendant;
+        }
+
+        return null;
+    }
 }
