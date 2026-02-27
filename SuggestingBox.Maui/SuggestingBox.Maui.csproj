@@ -10,6 +10,16 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>disable</Nullable>
 
+		<PackageId>SuggestingBox.Maui</PackageId>
+		<Version>1.0.0</Version>
+		<Authors>Howon Lee</Authors>
+		<Description>A .NET MAUI control providing inline mention/tag suggestion with formatted tokens. Type a prefix character to get a popup suggestion list — selected items become styled, immutable tokens.</Description>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/airtaxi/SuggestingBox.Maui</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/airtaxi/SuggestingBox.Maui</RepositoryUrl>
+		<PackageTags>maui;dotnet;mention;suggestion;token;editor;xamarin</PackageTags>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+
 		<!-- Enable XAML source generation for faster build times and improved performance.
 		     This generates C# code from XAML at compile time instead of runtime inflation.
 		     To disable, remove this line.
@@ -27,6 +37,10 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\README.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
 </Project>
