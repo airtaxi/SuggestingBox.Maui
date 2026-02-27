@@ -354,25 +354,44 @@ public class SuggestingBox : ContentView
 
         if (affectedTokens.Count == 0) return false;
 
-        // Reconstruct from the old text with entire tokens removed
-        string result = oldText;
-        int cursorTarget = editPosition;
+        // Build the union of the user's deletion range and all affected token ranges,
+        // so both token text and any non-token text in the deleted region are removed.
+        var removeRanges = new List<(int Start, int End)>
+        {
+            (editPosition, editPosition + deletedCount)
+        };
 
         foreach (var token in affectedTokens)
         {
-            int removeLength = token.Length;
-
-            // Also remove the trailing space that was inserted after the token
-            if (token.EndIndex < result.Length && result[token.EndIndex] == ' ')
-                removeLength++;
-
-            cursorTarget = Math.Min(cursorTarget, token.StartIndex);
-            result = result.Remove(token.StartIndex, removeLength);
+            int tokenEnd = token.EndIndex;
+            if (tokenEnd < oldText.Length && oldText[tokenEnd] == ' ')
+                tokenEnd++;
+            removeRanges.Add((token.StartIndex, tokenEnd));
             tokens.Remove(token);
         }
 
+        removeRanges.Sort((a, b) => a.Start.CompareTo(b.Start));
+        var mergedRanges = new List<(int Start, int End)> { removeRanges[0] };
+        foreach (var range in removeRanges.Skip(1))
+        {
+            var last = mergedRanges[^1];
+            if (range.Start <= last.End)
+                mergedRanges[^1] = (last.Start, Math.Max(last.End, range.End));
+            else
+                mergedRanges.Add(range);
+        }
+
+        string result = oldText;
+        for (int index = mergedRanges.Count - 1; index >= 0; index--)
+        {
+            int removeStart = mergedRanges[index].Start;
+            int removeEnd = Math.Min(mergedRanges[index].End, result.Length);
+            result = result.Remove(removeStart, removeEnd - removeStart);
+        }
+
+        int cursorTarget = Math.Min(mergedRanges[0].Start, result.Length);
         RecalculateTokenPositions(result);
-        ApplyTextAndScheduleSync(result, Math.Min(cursorTarget, result.Length));
+        ApplyTextAndScheduleSync(result, cursorTarget);
         return true;
     }
 
