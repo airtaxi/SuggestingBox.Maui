@@ -4,7 +4,11 @@
 
 🌐 [한국어](README.ko.md)
 
-A .NET MAUI controlthat provides inline mention/tag suggestion functionality with formatted tokens. Type a prefix character (e.g., `@` or `#`) and get a popup suggestion list — selected items become styled, immutable tokens embedded in the editor.
+A .NET MAUI control that provides inline mention/tag suggestion functionality with formatted tokens. Type a prefix character (e.g., `@` or `#`) and get a popup suggestion list — selected items become styled, immutable tokens embedded in the editor.
+
+## 📷 Showcase
+
+![Showcase](Gallery/Showcase.png)
 
 ## Features
 
