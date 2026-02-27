@@ -584,7 +584,7 @@ public class SuggestingBox : ContentView
                     BackgroundColor = chosenArgs.Format.BackgroundColor,
                     ForegroundColor = chosenArgs.Format.ForegroundColor,
                     Bold = chosenArgs.Format.Bold
-                }, selectedItem);
+                }, chosenArgs.Item ?? selectedItem);
 
             // Calculate the text length change for adjusting existing tokens
             int lengthDelta = tokenText.Length + 1 - (currentPrefix.Length + currentQueryText.Length);

@@ -6,4 +6,5 @@ public class SuggestionChosenEventArgs(string prefix, object selectedItem) : Eve
     public object SelectedItem { get; } = selectedItem;
     public SuggestionFormat Format { get; } = new();
     public string DisplayText { get; set; } = string.Empty;
+    public object Item { get; set; }
 }
