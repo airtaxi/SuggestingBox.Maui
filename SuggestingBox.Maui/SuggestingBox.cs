@@ -52,6 +52,9 @@ public class SuggestingBox : ContentView
     public static readonly BindableProperty ImageInsertedCommandProperty =
         BindableProperty.Create(nameof(ImageInsertedCommand), typeof(ICommand), typeof(SuggestingBox));
 
+    public static readonly BindableProperty TextChangedCommandProperty =
+        BindableProperty.Create(nameof(TextChangedCommand), typeof(ICommand), typeof(SuggestingBox));
+
     public string Prefixes
     {
         get => (string)GetValue(PrefixesProperty);
@@ -106,9 +109,16 @@ public class SuggestingBox : ContentView
         set => SetValue(ImageInsertedCommandProperty, value);
     }
 
+    public ICommand TextChangedCommand
+    {
+        get => (ICommand)GetValue(TextChangedCommandProperty);
+        set => SetValue(TextChangedCommandProperty, value);
+    }
+
     public event SuggestingBoxEventHandler<SuggestionChosenEventArgs> SuggestionChosen;
     public event SuggestingBoxEventHandler<SuggestionRequestedEventArgs> SuggestionRequested;
     public event SuggestingBoxEventHandler<ImageInsertedEventArgs> ImageInserted;
+    public event EventHandler<TextChangedEventArgs> TextChanged;
 
     public SuggestingBox()
     {
@@ -217,7 +227,7 @@ public class SuggestingBox : ContentView
                 BackgroundColor = token.Format.BackgroundColor,
                 ForegroundColor = token.Format.ForegroundColor,
                 Bold = token.Format.Bold
-            })).ToList();
+            }, token.Item)).ToList();
 
     public void SetContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokenInfos)
     {
@@ -234,7 +244,7 @@ public class SuggestingBox : ContentView
                     BackgroundColor = tokenInfo.Format.BackgroundColor,
                     ForegroundColor = tokenInfo.Format.ForegroundColor,
                     Bold = tokenInfo.Format.Bold
-                }));
+                }, tokenInfo.Item));
 
         editor.Text = text;
         Text = text;
@@ -299,6 +309,11 @@ public class SuggestingBox : ContentView
         isUpdatingText = true;
         Text = newText;
         isUpdatingText = false;
+
+        var textChangedEventArgs = new TextChangedEventArgs(oldText, newText);
+        TextChanged?.Invoke(this, textChangedEventArgs);
+        if (TextChangedCommand is { } textChangedCommand && textChangedCommand.CanExecute(textChangedEventArgs))
+            textChangedCommand.Execute(textChangedEventArgs);
 
         // Infer cursor position from the edit region because editor.CursorPosition
         // may not be synced yet on Android/iOS when TextChanged fires.
@@ -573,7 +588,7 @@ public class SuggestingBox : ContentView
                     BackgroundColor = chosenArgs.Format.BackgroundColor,
                     ForegroundColor = chosenArgs.Format.ForegroundColor,
                     Bold = chosenArgs.Format.Bold
-                });
+                }, selectedItem);
 
             // Calculate the text length change for adjusting existing tokens
             int lengthDelta = tokenText.Length + 1 - (currentPrefix.Length + currentQueryText.Length);
