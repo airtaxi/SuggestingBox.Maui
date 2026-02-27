@@ -721,6 +721,8 @@ public class SuggestingBox : ContentView
         if (page is null) return;
 
         var originalContent = page.Content;
+        page.Content = null; // Detach from old parent before reparenting
+        
         var overlayRoot = new Grid();
         overlayRoot.Children.Add(originalContent);
 
@@ -738,12 +740,31 @@ public class SuggestingBox : ContentView
 
     private Point GetPositionRelativeToPage()
     {
+        // Use platform-specific native API for accurate positioning when possible.
+        // The manual tree walk below can accumulate rounding errors in deeply nested layouts.
+        if (overlayLayer?.Handler?.PlatformView is not null && Handler?.PlatformView is not null)
+        {
+            var nativePosition = TextFormatter.GetPositionRelativeToView(this, overlayLayer);
+            if (!double.IsNaN(nativePosition.X))
+                return nativePosition;
+        }
+
+        // Fallback: manual tree walk
         double x = 0;
         double y = 0;
         VisualElement current = this;
 
+        // The popup is positioned within the overlay layer (child of overlayRoot).
+        // Stop at overlayRoot to avoid including its offset caused by Page padding/safe area.
+        var overlayRoot = overlayLayer?.Parent as VisualElement;
+
         while (current is not null and not Page)
         {
+            if (overlayRoot is not null && current == overlayRoot)
+            {
+                break;
+            }
+
             x += current.X + current.TranslationX;
             y += current.Y + current.TranslationY;
 

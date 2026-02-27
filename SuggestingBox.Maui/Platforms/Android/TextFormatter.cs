@@ -99,4 +99,22 @@ internal static partial class TextFormatter
         float density = rootView.Resources?.DisplayMetrics?.Density ?? 1f;
         return imeInsets.Bottom / density;
     }
+
+    internal static partial Microsoft.Maui.Graphics.Point GetPositionRelativeToView(VisualElement source, VisualElement target)
+    {
+        var sourceNativeView = source.Handler?.PlatformView as Android.Views.View;
+        var targetNativeView = target.Handler?.PlatformView as Android.Views.View;
+        if (sourceNativeView is null || targetNativeView is null)
+            return new Microsoft.Maui.Graphics.Point(double.NaN, double.NaN);
+
+        int[] sourceLocation = new int[2];
+        int[] targetLocation = new int[2];
+        sourceNativeView.GetLocationOnScreen(sourceLocation);
+        targetNativeView.GetLocationOnScreen(targetLocation);
+
+        float density = sourceNativeView.Resources?.DisplayMetrics?.Density ?? 1f;
+        return new Microsoft.Maui.Graphics.Point(
+            (sourceLocation[0] - targetLocation[0]) / density,
+            (sourceLocation[1] - targetLocation[1]) / density);
+    }
 }

@@ -15,4 +15,7 @@ internal static partial class TextFormatter
     internal static partial void UnsubscribePasteHandler(Editor editor);
     // Returns the height of the software keyboard in MAUI DIPs, or 0 when no keyboard is visible.
     internal static partial double GetSoftKeyboardHeight();
+    // Returns the position of source's top-left corner relative to target's top-left corner in MAUI DIPs.
+    // Returns (NaN, NaN) when native views are unavailable.
+    internal static partial Point GetPositionRelativeToView(VisualElement source, VisualElement target);
 }

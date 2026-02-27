@@ -195,4 +195,16 @@ internal static partial class TextFormatter
     }
 
     internal static partial double GetSoftKeyboardHeight() => 0;
+
+    internal static partial Point GetPositionRelativeToView(VisualElement source, VisualElement target)
+    {
+        var sourceNativeView = source.Handler?.PlatformView as FrameworkElement;
+        var targetNativeView = target.Handler?.PlatformView as FrameworkElement;
+        if (sourceNativeView is null || targetNativeView is null)
+            return new Point(double.NaN, double.NaN);
+
+        var transform = sourceNativeView.TransformToVisual(targetNativeView);
+        var point = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+        return new Point(point.X, point.Y);
+    }
 }

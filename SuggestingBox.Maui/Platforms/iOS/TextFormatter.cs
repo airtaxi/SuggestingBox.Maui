@@ -168,4 +168,15 @@ internal static partial class TextFormatter
             cachedKeyboardHeight = 0;
         });
     }
+
+    internal static partial Point GetPositionRelativeToView(VisualElement source, VisualElement target)
+    {
+        var sourceNativeView = source.Handler?.PlatformView as UIView;
+        var targetNativeView = target.Handler?.PlatformView as UIView;
+        if (sourceNativeView is null || targetNativeView is null)
+            return new Point(double.NaN, double.NaN);
+
+        CGPoint point = sourceNativeView.ConvertPointToView(CGPoint.Empty, targetNativeView);
+        return new Point(point.X, point.Y);
+    }
 }
