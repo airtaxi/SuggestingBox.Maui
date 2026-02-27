@@ -18,3 +18,4 @@ applyTo: "**/*.cs"
 - MUST use primary constructors wherever possible.
 - MUST use collection expressions (`[item1, item2]`) wherever possible.
 - Actively use the latest C# language features and syntax.
+- When adding an event to a control, always create a corresponding ICommand BindableProperty. When adding a command, always create a corresponding event. Events and commands must always exist as a pair.
