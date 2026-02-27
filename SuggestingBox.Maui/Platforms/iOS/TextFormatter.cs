@@ -135,6 +135,8 @@ internal static partial class TextFormatter
 
     internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved) { }
     internal static partial void UnsubscribeCursorChanged(Editor editor) { }
+    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted) { }
+    internal static partial void UnsubscribePasteHandler(Editor editor) { }
 
     internal static partial double GetCursorBottomY(Editor editor)
     {

@@ -1,6 +1,8 @@
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
+using Windows.ApplicationModel.DataTransfer;
+using Windows.Storage.Streams;
 using WinFormatEffect = Microsoft.UI.Text.FormatEffect;
 
 namespace SuggestingBox.Maui;
@@ -78,6 +80,9 @@ internal static partial class TextFormatter
     private static readonly Dictionary<Editor, (RichEditBox richEditBox, RoutedEventHandler handler)>
         cursorHandlers = [];
 
+    private static readonly Dictionary<Editor, (RichEditBox richEditBox, Microsoft.UI.Xaml.Input.KeyEventHandler handler)>
+        pasteHandlers = [];
+
     internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved)
     {
         if (editor.Handler?.PlatformView is not RichEditBox richEditBox) return;
@@ -134,6 +139,46 @@ internal static partial class TextFormatter
             .GetService<Microsoft.Maui.Devices.IDeviceDisplay>()?.MainDisplayInfo.Density ?? 1.0;
 
         return scrollViewer.ExtentHeight / density;
+    }
+
+    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted)
+    {
+        if (editor.Handler?.PlatformView is not RichEditBox richEditBox) return;
+
+        void keyDownHandler(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs eventArgs)
+        {
+            if (eventArgs.Key != Windows.System.VirtualKey.V) return;
+
+            var ctrlState = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control);
+            if (!ctrlState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down)) return;
+
+            var clipboard = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+            if (!clipboard.Contains(StandardDataFormats.Bitmap)) return;
+
+            eventArgs.Handled = true;
+
+            Task.Run(async () =>
+            {
+                var streamReference = await clipboard.GetBitmapAsync();
+                using var stream = await streamReference.OpenReadAsync();
+                byte[] imageData = new byte[stream.Size];
+                using var reader = new DataReader(stream);
+                await reader.LoadAsync((uint)stream.Size);
+                reader.ReadBytes(imageData);
+
+                richEditBox.DispatcherQueue.TryEnqueue(() => onImagePasted(imageData));
+            });
+        }
+
+        richEditBox.KeyDown += keyDownHandler;
+        pasteHandlers[editor] = (richEditBox, keyDownHandler);
+    }
+
+    internal static partial void UnsubscribePasteHandler(Editor editor)
+    {
+        if (!pasteHandlers.TryGetValue(editor, out var entry)) return;
+        entry.richEditBox.KeyDown -= entry.handler;
+        pasteHandlers.Remove(editor);
     }
 
     private static T FindDescendant<T>(DependencyObject parent) where T : DependencyObject

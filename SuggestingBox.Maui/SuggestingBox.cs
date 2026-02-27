@@ -132,9 +132,15 @@ public class SuggestingBox : ContentView
     private void OnEditorHandlerChanged(object sender, EventArgs e)
     {
         if (editor.Handler is not null)
+        {
             TextFormatter.SubscribeCursorChanged(editor, OnNativeCursorChanged);
+            TextFormatter.SubscribePasteHandler(editor, RaiseImageInserted);
+        }
         else
+        {
             TextFormatter.UnsubscribeCursorChanged(editor);
+            TextFormatter.UnsubscribePasteHandler(editor);
+        }
     }
 
     private void OnNativeCursorChanged(int previousPosition, int newPosition)

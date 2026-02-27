@@ -10,4 +10,7 @@ internal static partial class TextFormatter
     internal static partial void UnsubscribeCursorChanged(Editor editor);
     // Returns the Y coordinate of the bottom of the cursor line, in MAUI DIPs, relative to the editor's top.
     internal static partial double GetCursorBottomY(Editor editor);
+    // Intercept image paste on platforms that embed images into the editor (e.g. Windows RichEditBox)
+    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted);
+    internal static partial void UnsubscribePasteHandler(Editor editor);
 }
