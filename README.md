@@ -108,6 +108,19 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 | `ForegroundColor` | `Color` | `Colors.Black` |
 | `Bold` | `FormatEffect` | `FormatEffect.Off` |
 
+## Contributing
+
+Pull requests are welcome! If you have ideas for improvements or find a bug, feel free to open an issue or submit a PR.
+
+## Acknowledgements
+
+This project was built with the help of [GitHub Copilot](https://github.com/features/copilot).
+
+Inspired by and grateful to the following projects:
+
+- [SpeakLink](https://github.com/engagesolutionsgroup/SpeakLink) — A .NET MAUI mention editor that served as a key reference for inline mention functionality.
+- [Windows Community Toolkit](https://github.com/CommunityToolkit/Windows) — Provided valuable insights for Windows platform implementation.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE.txt).

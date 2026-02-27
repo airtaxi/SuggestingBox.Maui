@@ -108,6 +108,19 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 | `ForegroundColor` | `Color` | `Colors.Black` |
 | `Bold` | `FormatEffect` | `FormatEffect.Off` |
 
+## 기여하기
+
+Pull Request는 언제든 환영합니다! 개선 아이디어가 있거나 버그를 발견하셨다면 이슈를 열거나 PR을 제출해 주세요.
+
+## 감사의 말
+
+이 프로젝트는 [GitHub Copilot](https://github.com/features/copilot)의 도움을 받아 제작되었습니다.
+
+다음 프로젝트들의 영감과 도움에 감사드립니다:
+
+- [SpeakLink](https://github.com/engagesolutionsgroup/SpeakLink) — 인라인 멘션 기능의 핵심 참고 자료가 된 .NET MAUI 멘션 에디터.
+- [Windows Community Toolkit](https://github.com/CommunityToolkit/Windows) — Windows 플랫폼 구현에 귀중한 인사이트를 제공.
+
 ## 라이선스
 
 이 프로젝트는 [MIT 라이선스](LICENSE.txt)를 따릅니다.
