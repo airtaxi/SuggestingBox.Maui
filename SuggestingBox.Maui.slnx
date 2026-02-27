@@ -1,6 +1,4 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src/SuggestingBox.Maui.Sample/SuggestingBox.Maui.Sample.csproj" />
-    <Project Path="src/SuggestingBox.Maui/SuggestingBox.Maui.csproj" />
-  </Folder>
+  <Project Path="SuggestingBox.Maui.Sample/SuggestingBox.Maui.Sample.csproj" />
+  <Project Path="SuggestingBox.Maui/SuggestingBox.Maui.csproj" />
 </Solution>
