@@ -11,6 +11,7 @@ public class SuggestingBox : ContentView
     private readonly Border suggestionPopup;
     private readonly List<SuggestionToken> tokens = [];
     private AbsoluteLayout overlayLayer;
+    private ContentView backgroundDismissLayer;
     private string currentPrefix = string.Empty;
     private string currentQueryText = string.Empty;
     private int prefixStartIndex = -1;
@@ -559,7 +560,6 @@ public class SuggestingBox : ContentView
         {
             UpdatePopupPosition();
             suggestionPopup.IsVisible = true;
-            UpdateOverlayInputTransparency();
             Dispatcher.Dispatch(() => editor.Focus());
         }
         else
@@ -700,8 +700,33 @@ public class SuggestingBox : ContentView
         AbsoluteLayout.SetLayoutBounds(suggestionPopup, new Rect(x, y, width, -1));
         AbsoluteLayout.SetLayoutFlags(suggestionPopup, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.None);
 
+        EnsureBackgroundDismissLayer();
+
         if (!overlayLayer.Children.Contains(suggestionPopup))
             overlayLayer.Children.Add(suggestionPopup);
+    }
+
+    private void EnsureBackgroundDismissLayer()
+    {
+        if (backgroundDismissLayer is null)
+        {
+            backgroundDismissLayer = new ContentView { BackgroundColor = Colors.Transparent };
+            var tapGesture = new TapGestureRecognizer();
+            tapGesture.Tapped += OnBackgroundDismissLayerTapped;
+            backgroundDismissLayer.GestureRecognizers.Add(tapGesture);
+        }
+
+        if (overlayLayer.Children.Contains(backgroundDismissLayer)) return;
+
+        AbsoluteLayout.SetLayoutBounds(backgroundDismissLayer, new Rect(0, 0, 1, 1));
+        AbsoluteLayout.SetLayoutFlags(backgroundDismissLayer, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.All);
+        overlayLayer.Children.Insert(0, backgroundDismissLayer);
+    }
+
+    private void OnBackgroundDismissLayerTapped(object sender, TappedEventArgs eventArgs)
+    {
+        HideSuggestions();
+        Dispatcher.Dispatch(() => editor.Focus());
     }
 
     private void EnsureOverlayLayer()
@@ -737,7 +762,6 @@ public class SuggestingBox : ContentView
         overlayRoot.Children.Add(overlayLayer);
 
         page.Content = overlayRoot;
-        UpdateOverlayInputTransparency();
     }
 
     private Point GetPositionRelativeToPage()
@@ -785,18 +809,16 @@ public class SuggestingBox : ContentView
     private void HideSuggestions()
     {
         suggestionPopup.IsVisible = false;
-        if (overlayLayer is not null && overlayLayer.Children.Contains(suggestionPopup))
-            overlayLayer.Children.Remove(suggestionPopup);
-        UpdateOverlayInputTransparency();
+        if (overlayLayer is not null)
+        {
+            if (overlayLayer.Children.Contains(backgroundDismissLayer))
+                overlayLayer.Children.Remove(backgroundDismissLayer);
+            if (overlayLayer.Children.Contains(suggestionPopup))
+                overlayLayer.Children.Remove(suggestionPopup);
+        }
         currentPrefix = string.Empty;
         currentQueryText = string.Empty;
         prefixStartIndex = -1;
-    }
-
-    private void UpdateOverlayInputTransparency()
-    {
-        if (overlayLayer is null) return;
-        overlayLayer.InputTransparent = !suggestionPopup.IsVisible;
     }
 
     private static (int position, int count) FindDeletionRegion(string oldText, string newText)
