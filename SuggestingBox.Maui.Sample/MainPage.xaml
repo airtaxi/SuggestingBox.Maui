@@ -78,6 +78,23 @@
                    TextColor="Gray"
                    FontSize="13" />
 
+            <BoxView HeightRequest="1" Color="LightGray" Margin="0,8" />
+
+            <Label Text="Image Paste"
+                   FontSize="18"
+                   FontAttributes="Bold" />
+
+            <Label x:Name="ImageStatusLabel"
+                   Text="Paste an image into the editor to test"
+                   TextColor="Gray"
+                   FontSize="13" />
+
+            <Image x:Name="PastedImage"
+                   IsVisible="False"
+                   MaximumHeightRequest="200"
+                   Aspect="AspectFit"
+                   HorizontalOptions="Start" />
+
         </VerticalStackLayout>
     </ScrollView>
 

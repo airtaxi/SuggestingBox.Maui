@@ -38,6 +38,7 @@ public partial class MainPage : ContentPage
         InitializeComponent();
         SuggestingBoxControl.SuggestionRequested += OnSuggestionRequested;
         SuggestingBoxControl.SuggestionChosen += OnSuggestingBoxSuggestionChosen;
+        SuggestingBoxControl.ImageInserted += OnImageInserted;
     }
 
     private void OnSuggestingBoxSuggestionChosen(SuggestingBox sender, SuggestionChosenEventArgs args)
@@ -53,6 +54,14 @@ public partial class MainPage : ContentPage
         {
             args.DisplayText = ((SampleEmailDataType)args.SelectedItem).DisplayName;
         }
+    }
+
+    private void OnImageInserted(SuggestingBox sender, ImageInsertedEventArgs args)
+    {
+        ImageStatusLabel.Text = $"Image pasted: {args.ImageData.Length:N0} bytes";
+        ImageStatusLabel.TextColor = Colors.Green;
+        PastedImage.Source = ImageSource.FromStream(() => new MemoryStream(args.ImageData));
+        PastedImage.IsVisible = true;
     }
 
     private void OnSuggestionRequested(SuggestingBox sender, SuggestionRequestedEventArgs args)
