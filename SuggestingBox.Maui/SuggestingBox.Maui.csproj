@@ -11,7 +11,7 @@
 		<Nullable>disable</Nullable>
 
 		<PackageId>SuggestingBox.Maui</PackageId>
-		<Version>1.0.4</Version>
+		<Version>1.0.5</Version>
 		<Authors>Howon Lee</Authors>
 		<Description>A .NET MAUI control providing inline mention/tag suggestion with formatted tokens. Type a prefix character to get a popup suggestion list — selected items become styled, immutable tokens.</Description>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
