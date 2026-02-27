@@ -559,6 +559,7 @@ public class SuggestingBox : ContentView
         {
             UpdatePopupPosition();
             suggestionPopup.IsVisible = true;
+            UpdateOverlayInputTransparency();
             Dispatcher.Dispatch(() => editor.Focus());
         }
         else
@@ -736,6 +737,7 @@ public class SuggestingBox : ContentView
         overlayRoot.Children.Add(overlayLayer);
 
         page.Content = overlayRoot;
+        UpdateOverlayInputTransparency();
     }
 
     private Point GetPositionRelativeToPage()
@@ -785,9 +787,16 @@ public class SuggestingBox : ContentView
         suggestionPopup.IsVisible = false;
         if (overlayLayer is not null && overlayLayer.Children.Contains(suggestionPopup))
             overlayLayer.Children.Remove(suggestionPopup);
+        UpdateOverlayInputTransparency();
         currentPrefix = string.Empty;
         currentQueryText = string.Empty;
         prefixStartIndex = -1;
+    }
+
+    private void UpdateOverlayInputTransparency()
+    {
+        if (overlayLayer is null) return;
+        overlayLayer.InputTransparent = !suggestionPopup.IsVisible;
     }
 
     private static (int position, int count) FindDeletionRegion(string oldText, string newText)
@@ -853,11 +862,24 @@ public class SuggestingBox : ContentView
         suggestionListView.HeightRequest = MaxSuggestionHeight;
 
         // Subscribe to SizeChanged — fires after the CollectionView is fully rendered (more reliable than Dispatch)
+        suggestionListView.SizeChanged -= OnSuggestionListSizeChangedForMeasurement;
         suggestionListView.SizeChanged += OnSuggestionListSizeChangedForMeasurement;
+
+        // Fallback: SizeChanged won't fire if HeightRequest didn't actually change
+        // (e.g., previous suggestion list already reached MaxSuggestionHeight with a different template).
+        // Double dispatch gives the CollectionView an extra frame to finish rendering
+        // items with a potentially new template before measuring.
+        Dispatcher.Dispatch(() =>
+        {
+            if (measuredItemHeight > 0) return;
+            Dispatcher.Dispatch(TryMeasureItemHeight);
+        });
     }
 
-    private void OnSuggestionListSizeChangedForMeasurement(object sender, EventArgs e)
+    private void TryMeasureItemHeight()
     {
+        if (measuredItemHeight > 0) return;
+
         suggestionListView.SizeChanged -= OnSuggestionListSizeChangedForMeasurement;
 
         IEnumerable source = suggestionListView.ItemsSource;
@@ -874,6 +896,12 @@ public class SuggestingBox : ContentView
         // Reposition the popup now that the actual height is known
         if (suggestionPopup.IsVisible)
             UpdatePopupPosition();
+    }
+
+    private void OnSuggestionListSizeChangedForMeasurement(object sender, EventArgs e)
+    {
+        suggestionListView.SizeChanged -= OnSuggestionListSizeChangedForMeasurement;
+        TryMeasureItemHeight();
     }
 
     private static void OnItemTemplateChanged(BindableObject bindable, object oldValue, object newValue)
