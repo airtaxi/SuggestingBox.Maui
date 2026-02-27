@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Windows.Input;
 using Microsoft.Maui.Controls.Shapes;
 using Microsoft.Maui.Layouts;
 
@@ -42,6 +43,15 @@ public class SuggestingBox : ContentView
         BindableProperty.Create(nameof(MaxSuggestionHeight), typeof(double), typeof(SuggestingBox), 200.0,
             propertyChanged: OnSuggestionHeightPropertyChanged);
 
+    public static readonly BindableProperty SuggestionRequestedCommandProperty =
+        BindableProperty.Create(nameof(SuggestionRequestedCommand), typeof(ICommand), typeof(SuggestingBox));
+
+    public static readonly BindableProperty SuggestionChosenCommandProperty =
+        BindableProperty.Create(nameof(SuggestionChosenCommand), typeof(ICommand), typeof(SuggestingBox));
+
+    public static readonly BindableProperty ImageInsertedCommandProperty =
+        BindableProperty.Create(nameof(ImageInsertedCommand), typeof(ICommand), typeof(SuggestingBox));
+
     public string Prefixes
     {
         get => (string)GetValue(PrefixesProperty);
@@ -76,6 +86,24 @@ public class SuggestingBox : ContentView
     {
         get => (double)GetValue(MaxSuggestionHeightProperty);
         set => SetValue(MaxSuggestionHeightProperty, value);
+    }
+
+    public ICommand SuggestionRequestedCommand
+    {
+        get => (ICommand)GetValue(SuggestionRequestedCommandProperty);
+        set => SetValue(SuggestionRequestedCommandProperty, value);
+    }
+
+    public ICommand SuggestionChosenCommand
+    {
+        get => (ICommand)GetValue(SuggestionChosenCommandProperty);
+        set => SetValue(SuggestionChosenCommandProperty, value);
+    }
+
+    public ICommand ImageInsertedCommand
+    {
+        get => (ICommand)GetValue(ImageInsertedCommandProperty);
+        set => SetValue(ImageInsertedCommandProperty, value);
     }
 
     public event SuggestingBoxEventHandler<SuggestionChosenEventArgs> SuggestionChosen;
@@ -217,8 +245,14 @@ public class SuggestingBox : ContentView
             ScheduleFormatting();
     }
 
-    public void RaiseImageInserted(byte[] imageData) =>
-        ImageInserted?.Invoke(this, new ImageInsertedEventArgs(imageData));
+    public void RaiseImageInserted(byte[] imageData)
+    {
+        var eventArgs = new ImageInsertedEventArgs(imageData);
+        ImageInserted?.Invoke(this, eventArgs);
+        if (ImageInsertedCommand is ICommand imageInsertedCommand
+            && imageInsertedCommand.CanExecute(eventArgs))
+            imageInsertedCommand.Execute(eventArgs);
+    }
 
     private void OnThemeChanged(object sender, AppThemeChangedEventArgs args) => UpdateThemeColors();
 
@@ -492,6 +526,12 @@ public class SuggestingBox : ContentView
         prefixStartIndex = lastPrefixIndex;
 
         SuggestionRequested?.Invoke(this, new SuggestionRequestedEventArgs(currentPrefix, queryText));
+        if (SuggestionRequestedCommand is ICommand suggestionRequestedCommand)
+        {
+            var requestedEventArgs = new SuggestionRequestedEventArgs(currentPrefix, queryText);
+            if (suggestionRequestedCommand.CanExecute(requestedEventArgs))
+                suggestionRequestedCommand.Execute(requestedEventArgs);
+        }
 
         if (ItemsSource is not null && ItemsSource.Cast<object>().Any())
         {
@@ -509,6 +549,9 @@ public class SuggestingBox : ContentView
         object selectedItem = args.CurrentSelection[0];
         var chosenArgs = new SuggestionChosenEventArgs(currentPrefix, selectedItem);
         SuggestionChosen?.Invoke(this, chosenArgs);
+        if (SuggestionChosenCommand is ICommand suggestionChosenCommand
+            && suggestionChosenCommand.CanExecute(chosenArgs))
+            suggestionChosenCommand.Execute(chosenArgs);
 
         if (!string.IsNullOrEmpty(chosenArgs.DisplayText))
         {
