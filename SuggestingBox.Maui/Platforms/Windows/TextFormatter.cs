@@ -106,6 +106,19 @@ internal static partial class TextFormatter
         cursorHandlers.Remove(editor);
     }
 
+    internal static partial double GetCursorBottomY(Editor editor)
+    {
+        if (editor.Handler?.PlatformView is not RichEditBox richEditBox) return 0;
+
+        richEditBox.Document.Selection.GetRect(PointOptions.ClientCoordinates, out Windows.Foundation.Rect clientRect, out _);
+        if (clientRect.IsEmpty) return 0;
+
+        // ClientCoordinates are relative to the RichEditBox's scrollable content area
+        // (inside border + padding). Add the top inset to get element-relative coordinates.
+        double topInset = richEditBox.BorderThickness.Top + richEditBox.Padding.Top;
+        return clientRect.Y + clientRect.Height + topInset;
+    }
+
     internal static partial double GetNativeContentHeight(CollectionView collectionView)
     {
         if (collectionView.Handler?.PlatformView is not FrameworkElement platformView)

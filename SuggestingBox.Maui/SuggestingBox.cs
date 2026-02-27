@@ -1,5 +1,6 @@
 using System.Collections;
 using Microsoft.Maui.Controls.Shapes;
+using Microsoft.Maui.Layouts;
 
 namespace SuggestingBox.Maui;
 
@@ -108,10 +109,14 @@ public class SuggestingBox : ContentView
             VerticalOptions = LayoutOptions.Start
         };
 
-        Content = new VerticalStackLayout
-        {
-            Children = { editor, suggestionPopup }
-        };
+        var containerLayout = new AbsoluteLayout();
+        AbsoluteLayout.SetLayoutBounds(editor, new Rect(0, 0, 1, AbsoluteLayout.AutoSize));
+        AbsoluteLayout.SetLayoutFlags(editor, AbsoluteLayoutFlags.WidthProportional);
+        AbsoluteLayout.SetLayoutBounds(suggestionPopup, new Rect(0, 0, 1, AbsoluteLayout.AutoSize));
+        AbsoluteLayout.SetLayoutFlags(suggestionPopup, AbsoluteLayoutFlags.WidthProportional);
+        containerLayout.Add(editor);
+        containerLayout.Add(suggestionPopup);
+        Content = containerLayout;
 
         UpdateThemeColors();
     }
@@ -428,7 +433,10 @@ public class SuggestingBox : ContentView
         SuggestionRequested?.Invoke(this, new SuggestionRequestedEventArgs(currentPrefix, queryText));
 
         if (ItemsSource is not null && ItemsSource.Cast<object>().Any())
+        {
+            UpdatePopupPosition();
             suggestionPopup.IsVisible = true;
+        }
         else
             HideSuggestions();
     }
@@ -516,6 +524,14 @@ public class SuggestingBox : ContentView
 
         tokens.Clear();
         tokens.AddRange(validTokens);
+    }
+
+    private void UpdatePopupPosition()
+    {
+        double cursorBottomY = TextFormatter.GetCursorBottomY(editor);
+        if (cursorBottomY <= 0)
+            cursorBottomY = editor.Height > 0 ? editor.Height : 0;
+        AbsoluteLayout.SetLayoutBounds(suggestionPopup, new Rect(0, cursorBottomY, 1, AbsoluteLayout.AutoSize));
     }
 
     private void HideSuggestions()

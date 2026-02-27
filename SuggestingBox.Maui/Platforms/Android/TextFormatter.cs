@@ -67,4 +67,16 @@ internal static partial class TextFormatter
 
     internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved) { }
     internal static partial void UnsubscribeCursorChanged(Editor editor) { }
+
+    internal static partial double GetCursorBottomY(Editor editor)
+    {
+        if (editor.Handler?.PlatformView is not Android.Widget.EditText editText) return 0;
+        if (editText.Layout is null) return 0;
+
+        int selectionStart = Math.Max(0, editText.SelectionStart);
+        int line = editText.Layout.GetLineForOffset(selectionStart);
+        float lineBottomPx = editText.Layout.GetLineBottom(line) + editText.TotalPaddingTop - editText.ScrollY;
+        float density = editText.Resources?.DisplayMetrics?.Density ?? 1f;
+        return lineBottomPx / density;
+    }
 }

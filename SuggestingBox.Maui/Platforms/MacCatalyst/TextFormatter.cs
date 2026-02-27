@@ -130,4 +130,13 @@ internal static partial class TextFormatter
 
     internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved) { }
     internal static partial void UnsubscribeCursorChanged(Editor editor) { }
+
+    internal static partial double GetCursorBottomY(Editor editor)
+    {
+        if (editor.Handler?.PlatformView is not UITextView textView) return 0;
+        if (textView.SelectedTextRange is not UITextRange selectedRange) return 0;
+
+        CGRect caretRect = textView.GetCaretRectForPosition(selectedRange.Start);
+        return caretRect.GetMaxY();
+    }
 }
