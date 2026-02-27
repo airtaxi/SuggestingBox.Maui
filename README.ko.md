@@ -1,8 +1,10 @@
 # SuggestingBox.Maui
 
+[![NuGet](https://img.shields.io/nuget/v/SuggestingBox.Maui.svg)](https://www.nuget.org/packages/SuggestingBox.Maui) [![NuGet Downloads](https://img.shields.io/nuget/dt/SuggestingBox.Maui.svg)](https://www.nuget.org/packages/SuggestingBox.Maui)
+
 🌐 [English](README.md)
 
-.NET MAUI용 인라인 멘션/태그 제안 컨트롤입니다. 접두 문자(예: `@`, `#`)를 입력하면 제안 팝업이 나타나고, 선택한 항목은 서식이 적용된 불변 토큰으로 에디터에 삽입됩니다.
+.NET MAUI용인라인 멘션/태그 제안 컨트롤입니다. 접두 문자(예: `@`, `#`)를 입력하면 제안 팝업이 나타나고, 선택한 항목은 서식이 적용된 불변 토큰으로 에디터에 삽입됩니다.
 
 ## 기능
 
