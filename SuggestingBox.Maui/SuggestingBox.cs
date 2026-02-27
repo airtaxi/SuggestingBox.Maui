@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Windows.Input;
 using Microsoft.Maui.Controls.Shapes;
-using Microsoft.Maui.Layouts;
 
 namespace SuggestingBox.Maui;
 
@@ -147,12 +146,9 @@ public class SuggestingBox : ContentView
             VerticalOptions = LayoutOptions.Start
         };
 
-        var containerLayout = new AbsoluteLayout();
-        AbsoluteLayout.SetLayoutBounds(editor, new Rect(0, 0, 1, AbsoluteLayout.AutoSize));
-        AbsoluteLayout.SetLayoutFlags(editor, AbsoluteLayoutFlags.WidthProportional);
-        AbsoluteLayout.SetLayoutBounds(suggestionPopup, new Rect(0, 0, 1, AbsoluteLayout.AutoSize));
-        AbsoluteLayout.SetLayoutFlags(suggestionPopup, AbsoluteLayoutFlags.WidthProportional);
+        var containerLayout = new Grid();
         containerLayout.Add(editor);
+        suggestionPopup.ZIndex = 1;
         containerLayout.Add(suggestionPopup);
         Content = containerLayout;
 
@@ -650,7 +646,7 @@ public class SuggestingBox : ContentView
         double cursorBottomY = TextFormatter.GetCursorBottomY(editor);
         if (cursorBottomY <= 0)
             cursorBottomY = editor.Height > 0 ? editor.Height : 0;
-        AbsoluteLayout.SetLayoutBounds(suggestionPopup, new Rect(0, cursorBottomY, 1, AbsoluteLayout.AutoSize));
+        suggestionPopup.TranslationY = cursorBottomY;
     }
 
     private void HideSuggestions()
