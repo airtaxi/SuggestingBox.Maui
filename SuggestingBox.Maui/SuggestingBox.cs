@@ -704,6 +704,8 @@ public class SuggestingBox : ContentView
 
         if (!overlayLayer.Children.Contains(suggestionPopup))
             overlayLayer.Children.Add(suggestionPopup);
+
+        overlayLayer.InputTransparent = false;
     }
 
     private void EnsureBackgroundDismissLayer()
@@ -815,6 +817,8 @@ public class SuggestingBox : ContentView
                 overlayLayer.Children.Remove(backgroundDismissLayer);
             if (overlayLayer.Children.Contains(suggestionPopup))
                 overlayLayer.Children.Remove(suggestionPopup);
+
+            overlayLayer.InputTransparent = true;
         }
         currentPrefix = string.Empty;
         currentQueryText = string.Empty;
