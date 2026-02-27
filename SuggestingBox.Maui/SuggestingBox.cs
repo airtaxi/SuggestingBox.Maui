@@ -134,10 +134,9 @@ public class SuggestingBox : ContentView
 
         suggestionListView = new CollectionView
         {
-            SelectionMode = SelectionMode.Single,
+            SelectionMode = SelectionMode.None,
             VerticalOptions = LayoutOptions.Start
         };
-        suggestionListView.SelectionChanged += OnSuggestionSelected;
 
         suggestionPopup = new Border
         {
@@ -566,11 +565,12 @@ public class SuggestingBox : ContentView
             HideSuggestions();
     }
 
-    private void OnSuggestionSelected(object sender, SelectionChangedEventArgs args)
+    private void OnItemTapped(object sender, TappedEventArgs eventArgs)
     {
-        if (args.CurrentSelection.Count == 0) return;
+        if (sender is not View view) return;
+        var selectedItem = view.BindingContext;
+        if (selectedItem is null) return;
 
-        object selectedItem = args.CurrentSelection[0];
         var chosenArgs = new SuggestionChosenEventArgs(currentPrefix, selectedItem);
         SuggestionChosen?.Invoke(this, chosenArgs);
         if (SuggestionChosenCommand is ICommand suggestionChosenCommand
@@ -621,7 +621,6 @@ public class SuggestingBox : ContentView
         }
 
         HideSuggestions();
-        suggestionListView.SelectedItem = null;
     }
 
     private void ScheduleFormatting()
@@ -933,8 +932,24 @@ public class SuggestingBox : ContentView
     private static void OnItemTemplateChanged(BindableObject bindable, object oldValue, object newValue)
     {
         if (bindable is not SuggestingBox suggestingBox) return;
-        suggestingBox.suggestionListView.ItemTemplate = newValue as DataTemplate;
+        if (newValue is DataTemplate userTemplate)
+            suggestingBox.suggestionListView.ItemTemplate = suggestingBox.WrapTemplateWithTapHandler(userTemplate);
+        else
+            suggestingBox.suggestionListView.ItemTemplate = null;
         suggestingBox.measuredItemHeight = 0;
+    }
+
+    private DataTemplate WrapTemplateWithTapHandler(DataTemplate userTemplate)
+    {
+        return new DataTemplate(() =>
+        {
+            var userContent = (View)userTemplate.CreateContent();
+            var container = new ContentView { Content = userContent };
+            var tapGesture = new TapGestureRecognizer();
+            tapGesture.Tapped += OnItemTapped;
+            container.GestureRecognizers.Add(tapGesture);
+            return container;
+        });
     }
 
     private static void OnTextPropertyChanged(BindableObject bindable, object oldValue, object newValue)
