@@ -80,7 +80,7 @@ internal static partial class TextFormatter
     private static readonly Dictionary<Editor, (RichEditBox richEditBox, RoutedEventHandler handler)>
         cursorHandlers = [];
 
-    private static readonly Dictionary<Editor, (RichEditBox richEditBox, Microsoft.UI.Xaml.Input.KeyEventHandler handler)>
+    private static readonly Dictionary<Editor, (RichEditBox richEditBox, TextControlPasteEventHandler handler)>
         pasteHandlers = [];
 
     internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved)
@@ -145,16 +145,12 @@ internal static partial class TextFormatter
     {
         if (editor.Handler?.PlatformView is not RichEditBox richEditBox) return;
 
-        void keyDownHandler(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs eventArgs)
+        void pasteHandler(object sender, TextControlPasteEventArgs eventArgs)
         {
-            if (eventArgs.Key != Windows.System.VirtualKey.V) return;
-
-            var ctrlState = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control);
-            if (!ctrlState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down)) return;
-
             var clipboard = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
             if (!clipboard.Contains(StandardDataFormats.Bitmap)) return;
 
+            // Block the image from being inserted into the RichEditBox
             eventArgs.Handled = true;
 
             Task.Run(async () =>
@@ -170,14 +166,14 @@ internal static partial class TextFormatter
             });
         }
 
-        richEditBox.KeyDown += keyDownHandler;
-        pasteHandlers[editor] = (richEditBox, keyDownHandler);
+        richEditBox.Paste += pasteHandler;
+        pasteHandlers[editor] = (richEditBox, pasteHandler);
     }
 
     internal static partial void UnsubscribePasteHandler(Editor editor)
     {
         if (!pasteHandlers.TryGetValue(editor, out var entry)) return;
-        entry.richEditBox.KeyDown -= entry.handler;
+        entry.richEditBox.Paste -= entry.handler;
         pasteHandlers.Remove(editor);
     }
 
