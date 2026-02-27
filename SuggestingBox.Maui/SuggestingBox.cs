@@ -175,6 +175,42 @@ public class SuggestingBox : ContentView
         return ItemsSource.Cast<object>();
     }
 
+    public IReadOnlyList<SuggestingBoxTokenInfo> GetTokens() =>
+        tokens.Select(token => new SuggestingBoxTokenInfo(
+            token.StartIndex, token.Prefix, token.DisplayText,
+            new SuggestionFormat
+            {
+                BackgroundColor = token.Format.BackgroundColor,
+                ForegroundColor = token.Format.ForegroundColor,
+                Bold = token.Format.Bold
+            })).ToList();
+
+    public void SetContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokenInfos)
+    {
+        isUpdatingText = true;
+
+        tokens.Clear();
+        foreach (var tokenInfo in tokenInfos.OrderBy(tokenInfo => tokenInfo.StartIndex))
+            tokens.Add(new SuggestionToken(
+                tokenInfo.StartIndex,
+                tokenInfo.Prefix,
+                tokenInfo.DisplayText,
+                new SuggestionFormat
+                {
+                    BackgroundColor = tokenInfo.Format.BackgroundColor,
+                    ForegroundColor = tokenInfo.Format.ForegroundColor,
+                    Bold = tokenInfo.Format.Bold
+                }));
+
+        editor.Text = text;
+        Text = text;
+        TextFormatter.ResetNativeText(editor, text, text.Length);
+        isUpdatingText = false;
+
+        if (tokens.Count > 0)
+            ScheduleFormatting();
+    }
+
     public void RaiseImageInserted(byte[] imageData) =>
         ImageInserted?.Invoke(this, new ImageInsertedEventArgs(imageData));
 
