@@ -30,6 +30,9 @@ public partial class MainPage : ContentPage
         new("Charlie Brown", "charlie@example.com")
     ];
 
+    private string savedText;
+    private List<SuggestingBoxTokenInfo> savedTokens;
+
     public MainPage()
     {
         InitializeComponent();
@@ -57,5 +60,32 @@ public partial class MainPage : ContentPage
         sender.ItemsSource = args.Prefix == "#"
             ? hashtags.Where(x => x.Text.Contains(args.QueryText, StringComparison.OrdinalIgnoreCase))
             : emails.Where(x => x.DisplayName.Contains(args.QueryText, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void OnRefreshTokensClicked(object sender, EventArgs eventArgs)
+    {
+        var tokenInfos = SuggestingBoxControl.GetTokens();
+        TokenListView.ItemsSource = tokenInfos
+            .Select(token =>
+                $"[{token.StartIndex}..{token.StartIndex + token.Prefix.Length + token.DisplayText.Length}] " +
+                $"{token.Prefix}{token.DisplayText}")
+            .ToList();
+    }
+
+    private void OnSaveClicked(object sender, EventArgs eventArgs)
+    {
+        savedText = SuggestingBoxControl.Text;
+        savedTokens = SuggestingBoxControl.GetTokens().ToList();
+        RestoreButton.IsEnabled = true;
+        SaveStatusLabel.Text = $"Saved: \"{savedText}\" with {savedTokens.Count} token(s)";
+        SaveStatusLabel.TextColor = Colors.Green;
+    }
+
+    private void OnRestoreClicked(object sender, EventArgs eventArgs)
+    {
+        if (savedTokens is null) return;
+        SuggestingBoxControl.SetContent(savedText, savedTokens);
+        SaveStatusLabel.Text = "Restored!";
+        SaveStatusLabel.TextColor = Colors.Blue;
     }
 }

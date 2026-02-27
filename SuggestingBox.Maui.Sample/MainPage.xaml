@@ -31,6 +31,53 @@
                 </suggestingBox:SuggestingBox.ItemTemplate>
             </suggestingBox:SuggestingBox>
 
+            <BoxView HeightRequest="1" Color="LightGray" Margin="0,8" />
+
+            <Label Text="Current Tokens"
+                   FontSize="18"
+                   FontAttributes="Bold" />
+
+            <Button x:Name="RefreshTokensButton"
+                    Text="Refresh Tokens"
+                    Clicked="OnRefreshTokensClicked" />
+
+            <CollectionView x:Name="TokenListView">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Border Stroke="LightGray"
+                                StrokeShape="RoundRectangle 4"
+                                Padding="8,4"
+                                Margin="0,2">
+                            <Label Text="{Binding .}" FontSize="13" />
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+                <CollectionView.EmptyView>
+                    <Label Text="No tokens" TextColor="Gray" FontSize="13" />
+                </CollectionView.EmptyView>
+            </CollectionView>
+
+            <BoxView HeightRequest="1" Color="LightGray" Margin="0,8" />
+
+            <Label Text="Save / Restore"
+                   FontSize="18"
+                   FontAttributes="Bold" />
+
+            <HorizontalStackLayout Spacing="8">
+                <Button x:Name="SaveButton"
+                        Text="Save"
+                        Clicked="OnSaveClicked" />
+                <Button x:Name="RestoreButton"
+                        Text="Restore"
+                        IsEnabled="False"
+                        Clicked="OnRestoreClicked" />
+            </HorizontalStackLayout>
+
+            <Label x:Name="SaveStatusLabel"
+                   Text="No saved state"
+                   TextColor="Gray"
+                   FontSize="13" />
+
         </VerticalStackLayout>
     </ScrollView>
 
