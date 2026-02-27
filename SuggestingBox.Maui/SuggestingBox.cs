@@ -146,17 +146,9 @@ public class SuggestingBox : ContentView
             VerticalOptions = LayoutOptions.Start
         };
 
-        var containerLayout = new Grid
-        {
-            RowDefinitions =
-            {
-                new RowDefinition(GridLength.Auto),
-                new RowDefinition(GridLength.Auto)
-            }
-        };
-        Grid.SetRow(editor, 0);
-        Grid.SetRow(suggestionPopup, 1);
+        var containerLayout = new Grid();
         containerLayout.Add(editor);
+        suggestionPopup.ZIndex = 1;
         containerLayout.Add(suggestionPopup);
         Content = containerLayout;
 
@@ -651,7 +643,10 @@ public class SuggestingBox : ContentView
 
     private void UpdatePopupPosition()
     {
-        // Popup is in row 1, positioned directly below the editor
+        double cursorBottomY = TextFormatter.GetCursorBottomY(editor);
+        if (cursorBottomY <= 0)
+            cursorBottomY = editor.Height > 0 ? editor.Height : 0;
+        suggestionPopup.TranslationY = cursorBottomY;
     }
 
     private void HideSuggestions()
@@ -721,12 +716,10 @@ public class SuggestingBox : ContentView
             return;
         }
 
-        // Use a reasonable default item height for first render
-        const double defaultItemHeight = 44;
-        double estimatedHeight = itemCount * defaultItemHeight;
-        suggestionListView.HeightRequest = Math.Min(estimatedHeight, MaxSuggestionHeight);
+        // First measurement: set to max height so all items are rendered, then measure actual content height
+        suggestionListView.HeightRequest = MaxSuggestionHeight;
 
-        // Measure actual content height after rendering for future accuracy
+        // Subscribe to SizeChanged — fires after the CollectionView is fully rendered (more reliable than Dispatch)
         suggestionListView.SizeChanged += OnSuggestionListSizeChangedForMeasurement;
     }
 
