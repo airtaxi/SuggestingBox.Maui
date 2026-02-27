@@ -193,4 +193,6 @@ internal static partial class TextFormatter
 
         return null;
     }
+
+    internal static partial double GetSoftKeyboardHeight() => 0;
 }

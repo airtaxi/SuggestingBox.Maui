@@ -141,4 +141,6 @@ internal static partial class TextFormatter
         CGRect caretRect = textView.GetCaretRectForPosition(selectedRange.Start);
         return caretRect.GetMaxY();
     }
+
+    internal static partial double GetSoftKeyboardHeight() => 0;
 }

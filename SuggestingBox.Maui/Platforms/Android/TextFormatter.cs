@@ -81,4 +81,22 @@ internal static partial class TextFormatter
         float density = editText.Resources?.DisplayMetrics?.Density ?? 1f;
         return lineBottomPx / density;
     }
+
+    internal static partial double GetSoftKeyboardHeight()
+    {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(30)) return 0;
+
+        var activity = Platform.CurrentActivity;
+        if (activity is null) return 0;
+
+        var rootView = activity.FindViewById(Android.Resource.Id.Content);
+        if (rootView is null) return 0;
+
+        var windowInsets = rootView.RootWindowInsets;
+        if (windowInsets is null) return 0;
+
+        var imeInsets = windowInsets.GetInsets(Android.Views.WindowInsets.Type.Ime());
+        float density = rootView.Resources?.DisplayMetrics?.Density ?? 1f;
+        return imeInsets.Bottom / density;
+    }
 }

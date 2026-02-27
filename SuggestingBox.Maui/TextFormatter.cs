@@ -13,4 +13,6 @@ internal static partial class TextFormatter
     // Intercept image paste on platforms that embed images into the editor (e.g. Windows RichEditBox)
     internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted);
     internal static partial void UnsubscribePasteHandler(Editor editor);
+    // Returns the height of the software keyboard in MAUI DIPs, or 0 when no keyboard is visible.
+    internal static partial double GetSoftKeyboardHeight();
 }

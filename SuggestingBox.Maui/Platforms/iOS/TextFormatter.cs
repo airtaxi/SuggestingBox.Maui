@@ -146,4 +146,26 @@ internal static partial class TextFormatter
         CGRect caretRect = textView.GetCaretRectForPosition(selectedRange.Start);
         return caretRect.GetMaxY();
     }
+
+    private static double cachedKeyboardHeight;
+    private static bool keyboardObserversRegistered;
+
+    internal static partial double GetSoftKeyboardHeight() => cachedKeyboardHeight;
+
+    internal static void RegisterKeyboardObservers()
+    {
+        if (keyboardObserversRegistered) return;
+        keyboardObserversRegistered = true;
+
+        UIKeyboard.Notifications.ObserveWillShow((sender, args) =>
+        {
+            CGRect frame = args.FrameEnd;
+            cachedKeyboardHeight = frame.Height;
+        });
+
+        UIKeyboard.Notifications.ObserveWillHide((sender, args) =>
+        {
+            cachedKeyboardHeight = 0;
+        });
+    }
 }

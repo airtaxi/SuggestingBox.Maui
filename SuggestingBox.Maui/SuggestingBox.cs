@@ -10,6 +10,7 @@ public class SuggestingBox : ContentView
     private readonly CollectionView suggestionListView;
     private readonly Border suggestionPopup;
     private readonly List<SuggestionToken> tokens = [];
+    private AbsoluteLayout overlayLayer;
     private string currentPrefix = string.Empty;
     private string currentQueryText = string.Empty;
     private int prefixStartIndex = -1;
@@ -143,13 +144,12 @@ public class SuggestingBox : ContentView
             Padding = new Thickness(4),
             IsVisible = false,
             Content = suggestionListView,
-            VerticalOptions = LayoutOptions.Start
+            VerticalOptions = LayoutOptions.Start,
+            MaximumHeightRequest = MaxSuggestionHeight
         };
 
         var containerLayout = new Grid();
         containerLayout.Add(editor);
-        suggestionPopup.ZIndex = 1;
-        containerLayout.Add(suggestionPopup);
         Content = containerLayout;
 
         UpdateThemeColors();
@@ -161,6 +161,17 @@ public class SuggestingBox : ContentView
 
         if (Application.Current is Application application)
             application.RequestedThemeChanged += OnThemeChanged;
+
+        // Initialize the overlay layer early so the first popup open
+        // does not trigger a reparent (which steals editor focus and
+        // leaves overlayLayer.Height at 0 before layout).
+        if (Handler is not null)
+        {
+#if IOS
+            TextFormatter.RegisterKeyboardObservers();
+#endif
+            Dispatcher.Dispatch(() => EnsureOverlayLayer());
+        }
     }
 
     private void OnEditorHandlerChanged(object sender, EventArgs e)
@@ -548,6 +559,7 @@ public class SuggestingBox : ContentView
         {
             UpdatePopupPosition();
             suggestionPopup.IsVisible = true;
+            Dispatcher.Dispatch(() => editor.Focus());
         }
         else
             HideSuggestions();
@@ -643,15 +655,115 @@ public class SuggestingBox : ContentView
 
     private void UpdatePopupPosition()
     {
+        EnsureOverlayLayer();
+        if (overlayLayer is null) return;
+
         double cursorBottomY = TextFormatter.GetCursorBottomY(editor);
         if (cursorBottomY <= 0)
             cursorBottomY = editor.Height > 0 ? editor.Height : 0;
-        suggestionPopup.TranslationY = cursorBottomY;
+
+        double fontSize = editor.FontSize > 0 ? editor.FontSize : 14;
+        double cursorLineHeight = fontSize * 1.4;
+        double cursorTopY = Math.Max(0, cursorBottomY - cursorLineHeight);
+
+        Point position = GetPositionRelativeToPage();
+        double popupWidth = Width > 0 ? Width : 300;
+        double popupHeight = suggestionListView.HeightRequest > 0
+            ? Math.Min(suggestionListView.HeightRequest, MaxSuggestionHeight)
+            : MaxSuggestionHeight;
+        // Account for Border padding (4 on each side)
+        double totalPopupHeight = popupHeight + 8;
+
+        double popupX = position.X;
+        double popupYBelow = position.Y + cursorBottomY;
+
+        double availableHeight = overlayLayer.Height - TextFormatter.GetSoftKeyboardHeight();
+        bool overflowsBelow = availableHeight > 0 && popupYBelow + totalPopupHeight > availableHeight;
+
+        if (overflowsBelow)
+        {
+            double popupYAbove = position.Y + cursorTopY - totalPopupHeight;
+            if (popupYAbove >= 0)
+            {
+                SetPopupBounds(popupX, popupYAbove, popupWidth);
+                return;
+            }
+        }
+
+        SetPopupBounds(popupX, popupYBelow, popupWidth);
+    }
+
+    private void SetPopupBounds(double x, double y, double width)
+    {
+        suggestionPopup.WidthRequest = width;
+        AbsoluteLayout.SetLayoutBounds(suggestionPopup, new Rect(x, y, width, -1));
+        AbsoluteLayout.SetLayoutFlags(suggestionPopup, Microsoft.Maui.Layouts.AbsoluteLayoutFlags.None);
+
+        if (!overlayLayer.Children.Contains(suggestionPopup))
+            overlayLayer.Children.Add(suggestionPopup);
+    }
+
+    private void EnsureOverlayLayer()
+    {
+        if (overlayLayer is not null) return;
+
+        Element current = this;
+        ContentPage page = null;
+        while (current is not null)
+        {
+            if (current is ContentPage contentPage)
+            {
+                page = contentPage;
+                break;
+            }
+            current = current.Parent;
+        }
+        if (page is null) return;
+
+        var originalContent = page.Content;
+        var overlayRoot = new Grid();
+        overlayRoot.Children.Add(originalContent);
+
+        overlayLayer = new AbsoluteLayout
+        {
+            InputTransparent = true,
+            CascadeInputTransparent = false,
+            IsClippedToBounds = false
+        };
+        overlayLayer.ZIndex = 10000;
+        overlayRoot.Children.Add(overlayLayer);
+
+        page.Content = overlayRoot;
+    }
+
+    private Point GetPositionRelativeToPage()
+    {
+        double x = 0;
+        double y = 0;
+        VisualElement current = this;
+
+        while (current is not null and not Page)
+        {
+            x += current.X + current.TranslationX;
+            y += current.Y + current.TranslationY;
+
+            if (current is ScrollView scrollView)
+            {
+                y -= scrollView.ScrollY;
+                x -= scrollView.ScrollX;
+            }
+
+            current = current.Parent as VisualElement;
+        }
+
+        return new Point(x, y);
     }
 
     private void HideSuggestions()
     {
         suggestionPopup.IsVisible = false;
+        if (overlayLayer is not null && overlayLayer.Children.Contains(suggestionPopup))
+            overlayLayer.Children.Remove(suggestionPopup);
         currentPrefix = string.Empty;
         currentQueryText = string.Empty;
         prefixStartIndex = -1;
@@ -737,6 +849,10 @@ public class SuggestingBox : ContentView
             measuredItemHeight = contentHeight / itemCount;
             suggestionListView.HeightRequest = Math.Min(contentHeight, MaxSuggestionHeight);
         }
+
+        // Reposition the popup now that the actual height is known
+        if (suggestionPopup.IsVisible)
+            UpdatePopupPosition();
     }
 
     private static void OnItemTemplateChanged(BindableObject bindable, object oldValue, object newValue)
@@ -764,6 +880,7 @@ public class SuggestingBox : ContentView
     private static void OnSuggestionHeightPropertyChanged(BindableObject bindable, object oldValue, object newValue)
     {
         if (bindable is not SuggestingBox suggestingBox) return;
+        suggestingBox.suggestionPopup.MaximumHeightRequest = (double)newValue;
         suggestingBox.UpdateSuggestionHeight(suggestingBox.suggestionListView.ItemsSource);
     }
 }
