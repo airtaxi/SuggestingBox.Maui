@@ -148,7 +148,22 @@ internal static partial class TextFormatter
                         Android.Util.Log.Debug("SuggestingBox", $"  Item[{index}]: read {imageData.Length} bytes");
 
                         if (imageData.Length > 0)
-                            editText.Post(() => onImagePasted(imageData));
+                        {
+                            Android.Util.Log.Debug("SuggestingBox", $"  Item[{index}]: posting callback...");
+                            editText.Post(() =>
+                            {
+                                try
+                                {
+                                    Android.Util.Log.Debug("SuggestingBox", "Post callback executing onImagePasted");
+                                    onImagePasted(imageData);
+                                    Android.Util.Log.Debug("SuggestingBox", "Post callback completed successfully");
+                                }
+                                catch (Exception callbackException)
+                                {
+                                    Android.Util.Log.Error("SuggestingBox", $"Post callback exception: {callbackException}");
+                                }
+                            });
+                        }
                     }
                     catch (Exception exception)
                     {
