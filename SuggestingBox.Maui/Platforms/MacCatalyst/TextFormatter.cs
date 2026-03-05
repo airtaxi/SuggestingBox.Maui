@@ -130,8 +130,60 @@ internal static partial class TextFormatter
 
     internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved) { }
     internal static partial void UnsubscribeCursorChanged(Editor editor) { }
-    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted) { }
-    internal static partial void UnsubscribePasteHandler(Editor editor) { }
+    private static readonly Dictionary<Editor, (UITextView textView, PasteInterceptor interceptor)>
+        pasteHandlers = [];
+
+    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted)
+    {
+        if (editor.Handler?.PlatformView is not UITextView textView) return;
+
+        var interceptor = new PasteInterceptor(textView, onImagePasted);
+        pasteHandlers[editor] = (textView, interceptor);
+    }
+
+    internal static partial void UnsubscribePasteHandler(Editor editor)
+    {
+        if (!pasteHandlers.TryGetValue(editor, out var entry)) return;
+        entry.interceptor.Dispose();
+        pasteHandlers.Remove(editor);
+    }
+
+    private class PasteInterceptor : IDisposable
+    {
+        private readonly Action<byte[]> onImagePasted;
+        private readonly Foundation.NSObject notificationToken;
+
+        internal PasteInterceptor(UITextView textView, Action<byte[]> onImagePasted)
+        {
+            this.onImagePasted = onImagePasted;
+
+            notificationToken = NSNotificationCenter.DefaultCenter.AddObserver(
+                UITextView.TextDidChangeNotification, HandleTextChanged, textView);
+        }
+
+        private void HandleTextChanged(NSNotification notification)
+        {
+            var pasteboard = UIPasteboard.General;
+            if (!pasteboard.HasImages) return;
+
+            var image = pasteboard.Image;
+            if (image is null) return;
+
+            using var pngData = image.AsPNG();
+            if (pngData is null || pngData.Length == 0) return;
+
+            byte[] imageData = new byte[pngData.Length];
+            System.Runtime.InteropServices.Marshal.Copy(pngData.Bytes, imageData, 0, (int)pngData.Length);
+
+            onImagePasted(imageData);
+        }
+
+        public void Dispose()
+        {
+            if (notificationToken is not null)
+                NSNotificationCenter.DefaultCenter.RemoveObserver(notificationToken);
+        }
+    }
 
     internal static partial double GetCursorBottomY(Editor editor)
     {

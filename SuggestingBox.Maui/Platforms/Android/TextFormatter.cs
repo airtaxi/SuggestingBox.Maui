@@ -1,6 +1,7 @@
 using Android.Graphics;
 using Android.Text;
 using Android.Text.Style;
+using AndroidX.Core.View;
 using Microsoft.Maui.Platform;
 
 namespace SuggestingBox.Maui;
@@ -67,8 +68,76 @@ internal static partial class TextFormatter
 
     internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved) { }
     internal static partial void UnsubscribeCursorChanged(Editor editor) { }
-    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted) { }
-    internal static partial void UnsubscribePasteHandler(Editor editor) { }
+    private static readonly Dictionary<Editor, (Android.Widget.EditText editText, ContentReceiver receiver)>
+        pasteHandlers = [];
+
+    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted)
+    {
+        if (editor.Handler?.PlatformView is not Android.Widget.EditText editText) return;
+
+        var receiver = new ContentReceiver(editText, onImagePasted);
+        ViewCompat.SetOnReceiveContentListener(editText, ContentReceiver.MimeTypes, receiver);
+        pasteHandlers[editor] = (editText, receiver);
+    }
+
+    internal static partial void UnsubscribePasteHandler(Editor editor)
+    {
+        if (!pasteHandlers.TryGetValue(editor, out var entry)) return;
+        ViewCompat.SetOnReceiveContentListener(entry.editText, ContentReceiver.MimeTypes, null);
+        pasteHandlers.Remove(editor);
+    }
+
+    private class ContentReceiver(Android.Widget.EditText editText, Action<byte[]> onImagePasted)
+        : Java.Lang.Object, IOnReceiveContentListener
+    {
+        internal static readonly string[] MimeTypes = ["image/*"];
+
+        public AndroidX.Core.View.ContentInfoCompat OnReceiveContent(Android.Views.View view, AndroidX.Core.View.ContentInfoCompat payload)
+        {
+            var split = payload.Partition(new UriPredicate());
+            var uriContent = split.First as AndroidX.Core.View.ContentInfoCompat;
+            var remaining = split.Second as AndroidX.Core.View.ContentInfoCompat;
+
+            if (uriContent is not null)
+            {
+                var clip = uriContent.Clip;
+                for (int index = 0; index < clip.ItemCount; index++)
+                {
+                    var uri = clip.GetItemAt(index).Uri;
+                    if (uri is null) continue;
+
+                    try
+                    {
+                        var context = editText.Context;
+                        if (context is null) continue;
+
+                        using var inputStream = context.ContentResolver?.OpenInputStream(uri);
+                        if (inputStream is null) continue;
+
+                        using var memoryStream = new System.IO.MemoryStream();
+                        inputStream.CopyTo(memoryStream);
+                        byte[] imageData = memoryStream.ToArray();
+
+                        if (imageData.Length > 0)
+                            editText.Post(() => onImagePasted(imageData));
+                    }
+                    catch (Exception) { }
+                }
+            }
+
+            return remaining;
+        }
+    }
+
+    private class UriPredicate : Java.Lang.Object, AndroidX.Core.Util.IPredicate
+    {
+        public bool Test(Java.Lang.Object item)
+        {
+            if (item is Android.Content.ClipData.Item clipItem)
+                return clipItem.Uri is not null;
+            return false;
+        }
+    }
 
     internal static partial double GetCursorBottomY(Editor editor)
     {
