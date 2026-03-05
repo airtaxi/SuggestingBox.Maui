@@ -8,7 +8,7 @@ A .NET MAUI control that provides inline mention/tag suggestion functionality wi
 
 ## 📷 Showcase
 
-![Showcase](Gallery/Showcase.png)
+![Showcase](https://raw.githubusercontent.com/airtaxi/SuggestingBox.Maui/master/Gallery/Showcase.png)
 
 ## Features
 

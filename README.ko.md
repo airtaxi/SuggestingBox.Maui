@@ -8,7 +8,7 @@
 
 ## 📷 Showcase
 
-![Showcase](Gallery/Showcase.png)
+![Showcase](https://raw.githubusercontent.com/airtaxi/SuggestingBox.Maui/master/Gallery/Showcase.png)
 
 ## 기능
 
