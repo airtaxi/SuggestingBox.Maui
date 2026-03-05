@@ -77,6 +77,10 @@ internal static partial class TextFormatter
 
         var receiver = new ContentReceiver(editText, onImagePasted);
         ViewCompat.SetOnReceiveContentListener(editText, ContentReceiver.MimeTypes, receiver);
+
+        if (editText is PasteAwareEditText pasteAwareEditText)
+            pasteAwareEditText.OnImagePasted = onImagePasted;
+
         pasteHandlers[editor] = (editText, receiver);
     }
 
@@ -84,6 +88,10 @@ internal static partial class TextFormatter
     {
         if (!pasteHandlers.TryGetValue(editor, out var entry)) return;
         ViewCompat.SetOnReceiveContentListener(entry.editText, ContentReceiver.MimeTypes, null);
+
+        if (entry.editText is PasteAwareEditText pasteAwareEditText)
+            pasteAwareEditText.OnImagePasted = null;
+
         pasteHandlers.Remove(editor);
     }
 
