@@ -75,6 +75,9 @@ internal static partial class TextFormatter
     {
         if (editor.Handler?.PlatformView is not Android.Widget.EditText editText) return;
 
+        Android.Util.Log.Debug("SuggestingBox",
+            $"SubscribePasteHandler: PlatformView type={editText.GetType().Name}, isPasteAware={editText is PasteAwareEditText}");
+
         var receiver = new ContentReceiver(editText, onImagePasted);
         ViewCompat.SetOnReceiveContentListener(editText, ContentReceiver.MimeTypes, receiver);
 
@@ -102,9 +105,14 @@ internal static partial class TextFormatter
 
         public AndroidX.Core.View.ContentInfoCompat OnReceiveContent(Android.Views.View view, AndroidX.Core.View.ContentInfoCompat payload)
         {
+            Android.Util.Log.Debug("SuggestingBox", $"OnReceiveContent called, source={payload.Source}");
+
             var split = payload.Partition(new UriPredicate());
             var uriContent = split.First as AndroidX.Core.View.ContentInfoCompat;
             var remaining = split.Second as AndroidX.Core.View.ContentInfoCompat;
+
+            Android.Util.Log.Debug("SuggestingBox",
+                $"OnReceiveContent: uriContent={uriContent is not null}, remaining={remaining is not null}");
 
             if (uriContent is not null)
             {
