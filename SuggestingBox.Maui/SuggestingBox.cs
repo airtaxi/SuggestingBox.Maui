@@ -19,6 +19,7 @@ public class SuggestingBox : ContentView
     private int textChangeGeneration;
     private bool hasPendingTokenDeletion;
     private double measuredItemHeight;
+    private int measureRetryCount;
     private int lastKnownCursorPosition = -1;
 
     public static readonly BindableProperty PrefixesProperty =
@@ -885,6 +886,7 @@ public class SuggestingBox : ContentView
 
         // First measurement: set to max height so all items are rendered, then measure actual content height
         suggestionListView.HeightRequest = MaxSuggestionHeight;
+        measureRetryCount = 0;
 
         // Subscribe to SizeChanged — fires after the CollectionView is fully rendered (more reliable than Dispatch)
         suggestionListView.SizeChanged -= OnSuggestionListSizeChangedForMeasurement;
@@ -916,6 +918,13 @@ public class SuggestingBox : ContentView
         {
             measuredItemHeight = contentHeight / itemCount;
             suggestionListView.HeightRequest = Math.Min(contentHeight, MaxSuggestionHeight);
+        }
+        else if (measureRetryCount < 3)
+        {
+            // Native content height not available yet — retry after a short delay
+            measureRetryCount++;
+            Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(50), TryMeasureItemHeight);
+            return;
         }
 
         // Reposition the popup now that the actual height is known

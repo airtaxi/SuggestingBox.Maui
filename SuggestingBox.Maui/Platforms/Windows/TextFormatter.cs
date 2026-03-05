@@ -129,16 +129,39 @@ internal static partial class TextFormatter
         if (collectionView.Handler?.PlatformView is not FrameworkElement platformView)
             return 0;
 
-        // Walk the visual tree to find the inner ScrollViewer that WinUI uses for CollectionView.
-        // Its ScrollableHeight + ViewportHeight gives actual content height.
         ScrollViewer scrollViewer = FindDescendant<ScrollViewer>(platformView);
-        if (scrollViewer is null || scrollViewer.ExtentHeight <= 0)
+        if (scrollViewer is null)
             return 0;
 
-        double density = collectionView.Handler.MauiContext?.Services
-            .GetService<Microsoft.Maui.Devices.IDeviceDisplay>()?.MainDisplayInfo.Density ?? 1.0;
+        // Force WinUI to complete its deferred layout pass
+        if (scrollViewer.ExtentHeight <= 0)
+            scrollViewer.UpdateLayout();
 
-        return scrollViewer.ExtentHeight / density;
+        // When content overflows, ExtentHeight is the true content height
+        if (scrollViewer.ScrollableHeight > 0)
+            return scrollViewer.ExtentHeight;
+
+        // When content fits within the viewport, ExtentHeight == ViewportHeight (not content height).
+        // Sum realized item heights from the items panel for an accurate measurement.
+        double panelContentHeight = MeasureItemsPanelContentHeight(scrollViewer);
+
+        return panelContentHeight > 0 ? panelContentHeight : scrollViewer.ExtentHeight;
+    }
+
+    private static double MeasureItemsPanelContentHeight(ScrollViewer scrollViewer)
+    {
+        var itemsPanel = FindDescendant<ItemsStackPanel>(scrollViewer);
+        if (itemsPanel is null || itemsPanel.Children.Count <= 0)
+            return 0;
+
+        double totalHeight = 0;
+        foreach (UIElement child in itemsPanel.Children)
+        {
+            if (child is FrameworkElement frameworkElement)
+                totalHeight += frameworkElement.DesiredSize.Height;
+        }
+
+        return totalHeight;
     }
 
     internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted)
