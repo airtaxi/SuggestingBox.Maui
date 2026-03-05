@@ -75,9 +75,6 @@ internal static partial class TextFormatter
     {
         if (editor.Handler?.PlatformView is not Android.Widget.EditText editText) return;
 
-        Android.Util.Log.Debug("SuggestingBox",
-            $"SubscribePasteHandler: PlatformView type={editText.GetType().Name}, isPasteAware={editText is PasteAwareEditText}");
-
         var receiver = new ContentReceiver(editText, onImagePasted);
         ViewCompat.SetOnReceiveContentListener(editText, ContentReceiver.MimeTypes, receiver);
 
@@ -105,70 +102,35 @@ internal static partial class TextFormatter
 
         public AndroidX.Core.View.ContentInfoCompat OnReceiveContent(Android.Views.View view, AndroidX.Core.View.ContentInfoCompat payload)
         {
-            Android.Util.Log.Debug("SuggestingBox", $"OnReceiveContent called, source={payload.Source}");
-
             var split = payload.Partition(new UriPredicate());
             var uriContent = split.First as AndroidX.Core.View.ContentInfoCompat;
             var remaining = split.Second as AndroidX.Core.View.ContentInfoCompat;
 
-            Android.Util.Log.Debug("SuggestingBox",
-                $"OnReceiveContent: uriContent={uriContent is not null}, remaining={remaining is not null}");
-
             if (uriContent is not null)
             {
                 var clip = uriContent.Clip;
-                Android.Util.Log.Debug("SuggestingBox", $"OnReceiveContent: clip has {clip.ItemCount} item(s)");
 
                 for (int index = 0; index < clip.ItemCount; index++)
                 {
                     var uri = clip.GetItemAt(index).Uri;
-                    Android.Util.Log.Debug("SuggestingBox", $"  Item[{index}]: Uri={uri}");
                     if (uri is null) continue;
 
                     try
                     {
                         var context = editText.Context;
-                        if (context is null)
-                        {
-                            Android.Util.Log.Warn("SuggestingBox", $"  Item[{index}]: context is null");
-                            continue;
-                        }
+                        if (context is null) continue;
 
-                        Android.Util.Log.Debug("SuggestingBox", $"  Item[{index}]: opening input stream...");
                         using var inputStream = context.ContentResolver?.OpenInputStream(uri);
-                        if (inputStream is null)
-                        {
-                            Android.Util.Log.Warn("SuggestingBox", $"  Item[{index}]: OpenInputStream returned null");
-                            continue;
-                        }
+                        if (inputStream is null) continue;
 
                         using var memoryStream = new System.IO.MemoryStream();
                         inputStream.CopyTo(memoryStream);
                         byte[] imageData = memoryStream.ToArray();
-                        Android.Util.Log.Debug("SuggestingBox", $"  Item[{index}]: read {imageData.Length} bytes");
 
                         if (imageData.Length > 0)
-                        {
-                            Android.Util.Log.Debug("SuggestingBox", $"  Item[{index}]: posting callback...");
-                            editText.Post(() =>
-                            {
-                                try
-                                {
-                                    Android.Util.Log.Debug("SuggestingBox", "Post callback executing onImagePasted");
-                                    onImagePasted(imageData);
-                                    Android.Util.Log.Debug("SuggestingBox", "Post callback completed successfully");
-                                }
-                                catch (Exception callbackException)
-                                {
-                                    Android.Util.Log.Error("SuggestingBox", $"Post callback exception: {callbackException}");
-                                }
-                            });
-                        }
+                            editText.Post(() => onImagePasted(imageData));
                     }
-                    catch (Exception exception)
-                    {
-                        Android.Util.Log.Error("SuggestingBox", $"  Item[{index}]: Exception - {exception}");
-                    }
+                    catch (Exception) { }
                 }
             }
 
