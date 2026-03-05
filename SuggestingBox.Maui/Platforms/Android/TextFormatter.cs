@@ -117,27 +117,43 @@ internal static partial class TextFormatter
             if (uriContent is not null)
             {
                 var clip = uriContent.Clip;
+                Android.Util.Log.Debug("SuggestingBox", $"OnReceiveContent: clip has {clip.ItemCount} item(s)");
+
                 for (int index = 0; index < clip.ItemCount; index++)
                 {
                     var uri = clip.GetItemAt(index).Uri;
+                    Android.Util.Log.Debug("SuggestingBox", $"  Item[{index}]: Uri={uri}");
                     if (uri is null) continue;
 
                     try
                     {
                         var context = editText.Context;
-                        if (context is null) continue;
+                        if (context is null)
+                        {
+                            Android.Util.Log.Warn("SuggestingBox", $"  Item[{index}]: context is null");
+                            continue;
+                        }
 
+                        Android.Util.Log.Debug("SuggestingBox", $"  Item[{index}]: opening input stream...");
                         using var inputStream = context.ContentResolver?.OpenInputStream(uri);
-                        if (inputStream is null) continue;
+                        if (inputStream is null)
+                        {
+                            Android.Util.Log.Warn("SuggestingBox", $"  Item[{index}]: OpenInputStream returned null");
+                            continue;
+                        }
 
                         using var memoryStream = new System.IO.MemoryStream();
                         inputStream.CopyTo(memoryStream);
                         byte[] imageData = memoryStream.ToArray();
+                        Android.Util.Log.Debug("SuggestingBox", $"  Item[{index}]: read {imageData.Length} bytes");
 
                         if (imageData.Length > 0)
                             editText.Post(() => onImagePasted(imageData));
                     }
-                    catch (Exception) { }
+                    catch (Exception exception)
+                    {
+                        Android.Util.Log.Error("SuggestingBox", $"  Item[{index}]: Exception - {exception}");
+                    }
                 }
             }
 
