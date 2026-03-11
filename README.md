@@ -106,6 +106,29 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 | `GetTokens()` | Returns `IReadOnlyList<SuggestingBoxTokenInfo>` of current tokens. |
 | `SetContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokens)` | Restores the editor with the given text and tokens. |
 
+#### Example: Extracting tokens with `GetTokens()`
+
+```csharp
+var tokens = SuggestingBoxControl.GetTokens();
+foreach (var token in tokens)
+{
+    Console.WriteLine(
+        $"[{token.StartIndex}..{token.StartIndex + token.Prefix.Length + token.DisplayText.Length}] " +
+        $"{token.Prefix}{token.DisplayText}");
+}
+```
+
+#### Example: Saving and restoring with `SetContent()`
+
+```csharp
+// Save the current editor state
+var savedText = SuggestingBoxControl.Text;
+var savedTokens = SuggestingBoxControl.GetTokens().ToList();
+
+// Restore the editor state later
+SuggestingBoxControl.SetContent(savedText, savedTokens);
+```
+
 ### SuggestionFormat
 
 | Property | Type | Default |

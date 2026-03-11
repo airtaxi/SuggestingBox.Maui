@@ -106,6 +106,29 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 | `GetTokens()` | 현재 토큰 목록을 `IReadOnlyList<SuggestingBoxTokenInfo>`로 반환합니다. |
 | `SetContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokens)` | 주어진 텍스트와 토큰으로 에디터 상태를 복원합니다. |
 
+#### 예제: `GetTokens()`로 토큰 추출
+
+```csharp
+var tokens = SuggestingBoxControl.GetTokens();
+foreach (var token in tokens)
+{
+    Console.WriteLine(
+        $"[{token.StartIndex}..{token.StartIndex + token.Prefix.Length + token.DisplayText.Length}] " +
+        $"{token.Prefix}{token.DisplayText}");
+}
+```
+
+#### 예제: `SetContent()`로 저장 및 복원
+
+```csharp
+// 현재 에디터 상태 저장
+var savedText = SuggestingBoxControl.Text;
+var savedTokens = SuggestingBoxControl.GetTokens().ToList();
+
+// 나중에 에디터 상태 복원
+SuggestingBoxControl.SetContent(savedText, savedTokens);
+```
+
 ### SuggestionFormat
 
 | 속성 | 타입 | 기본값 |
