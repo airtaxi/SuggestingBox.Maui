@@ -45,6 +45,10 @@ public class SuggestingBox : ContentView
         BindableProperty.Create(nameof(MaxSuggestionHeight), typeof(double), typeof(SuggestingBox), 200.0,
             propertyChanged: OnSuggestionHeightPropertyChanged);
 
+    public static readonly BindableProperty DisableInputAccessoryViewProperty =
+        BindableProperty.Create(nameof(DisableInputAccessoryView), typeof(bool), typeof(SuggestingBox), true,
+            propertyChanged: OnDisableInputAccessoryViewPropertyChanged);
+
     public static readonly BindableProperty SuggestionRequestedCommandProperty =
         BindableProperty.Create(nameof(SuggestionRequestedCommand), typeof(ICommand), typeof(SuggestingBox));
 
@@ -93,6 +97,16 @@ public class SuggestingBox : ContentView
         set => SetValue(MaxSuggestionHeightProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets whether the iOS keyboard input accessory view is removed.
+    /// This property is supported only on iOS and defaults to <see langword="true" />.
+    /// </summary>
+    public bool DisableInputAccessoryView
+    {
+        get => (bool)GetValue(DisableInputAccessoryViewProperty);
+        set => SetValue(DisableInputAccessoryViewProperty, value);
+    }
+
     public ICommand SuggestionRequestedCommand
     {
         get => (ICommand)GetValue(SuggestionRequestedCommandProperty);
@@ -127,6 +141,7 @@ public class SuggestingBox : ContentView
         editor = new FormattedEditor
         {
             AutoSize = EditorAutoSizeOption.TextChanges,
+            DisableInputAccessoryView = DisableInputAccessoryView,
             VerticalOptions = LayoutOptions.Start
         };
         editor.TextChanged += OnEditorTextChanged;
@@ -750,7 +765,7 @@ public class SuggestingBox : ContentView
 
         var originalContent = page.Content;
         page.Content = null; // Detach from old parent before reparenting
-        
+
         var overlayRoot = new Grid();
         overlayRoot.Children.Add(originalContent);
 
@@ -981,5 +996,11 @@ public class SuggestingBox : ContentView
         if (bindable is not SuggestingBox suggestingBox) return;
         suggestingBox.suggestionPopup.MaximumHeightRequest = (double)newValue;
         suggestingBox.UpdateSuggestionHeight(suggestingBox.suggestionListView.ItemsSource);
+    }
+
+    private static void OnDisableInputAccessoryViewPropertyChanged(BindableObject bindable, object oldValue, object newValue)
+    {
+        if (bindable is not SuggestingBox suggestingBox) return;
+        suggestingBox.editor.DisableInputAccessoryView = (bool)newValue;
     }
 }
