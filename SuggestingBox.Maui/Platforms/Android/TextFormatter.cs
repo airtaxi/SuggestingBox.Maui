@@ -15,35 +15,69 @@ internal static partial class TextFormatter
 
         ClearSpans<BackgroundColorSpan>(spannable);
         ClearSpans<ForegroundColorSpan>(spannable);
+        ClearSpans<ImageSpan>(spannable);
         ClearSpans<StyleSpan>(spannable);
 
         foreach (var token in tokens)
         {
             if (token.StartIndex < 0 || token.EndIndex > spannable.Length()) continue;
+            if (token.IsImage)
+            {
+                var imageSpan = CreateImageSpan(editText, token);
+                if (imageSpan is not null) spannable.SetSpan(imageSpan, token.StartIndex, token.EndIndex, SpanTypes.ExclusiveExclusive);
+                continue;
+            }
 
             var format = token.Format;
 
             if (format.BackgroundColor != Colors.Transparent)
             {
-                spannable.SetSpan(
-                    AndroidColorSpanFactory.CreateBackgroundColorSpan(format.BackgroundColor.ToPlatform().ToArgb()),
-                    token.StartIndex, token.EndIndex, SpanTypes.ExclusiveExclusive);
+                spannable.SetSpan(AndroidColorSpanFactory.CreateBackgroundColorSpan(format.BackgroundColor.ToPlatform().ToArgb()), token.StartIndex, token.EndIndex, SpanTypes.ExclusiveExclusive);
             }
 
             if (format.ForegroundColor != Colors.Black)
             {
-                spannable.SetSpan(
-                    AndroidColorSpanFactory.CreateForegroundColorSpan(format.ForegroundColor.ToPlatform().ToArgb()),
-                    token.StartIndex, token.EndIndex, SpanTypes.ExclusiveExclusive);
+                spannable.SetSpan(AndroidColorSpanFactory.CreateForegroundColorSpan(format.ForegroundColor.ToPlatform().ToArgb()), token.StartIndex, token.EndIndex, SpanTypes.ExclusiveExclusive);
             }
 
             if (format.Bold == FormatEffect.On)
             {
-                spannable.SetSpan(
-                    new StyleSpan(TypefaceStyle.Bold),
-                    token.StartIndex, token.EndIndex, SpanTypes.ExclusiveExclusive);
+                spannable.SetSpan(new StyleSpan(TypefaceStyle.Bold), token.StartIndex, token.EndIndex, SpanTypes.ExclusiveExclusive);
             }
         }
+    }
+
+    private static ImageSpan CreateImageSpan(Android.Widget.EditText editText, SuggestionToken token)
+    {
+        if (token.ImageData.Length == 0) return null;
+
+        var bitmap = BitmapFactory.DecodeByteArray(token.ImageData, 0, token.ImageData.Length);
+        if (bitmap is null) return null;
+
+        var (width, height) = GetImageSize(editText, token, bitmap.Width, bitmap.Height);
+        if (width != bitmap.Width || height != bitmap.Height) bitmap = Bitmap.CreateScaledBitmap(bitmap, width, height, true);
+
+        return new ImageSpan(editText.Context, bitmap);
+    }
+
+    private static (int Width, int Height) GetImageSize(Android.Widget.EditText editText, SuggestionToken token, int originalWidth, int originalHeight)
+    {
+        double width = token.WidthRequest;
+        double height = token.HeightRequest;
+        float density = editText.Resources?.DisplayMetrics?.Density ?? 1f;
+
+        if (width > 0) width *= density;
+        if (height > 0) height *= density;
+
+        if (width > 0 && height <= 0) height = originalHeight * (width / originalWidth);
+        else if (height > 0 && width <= 0) width = originalWidth * (height / originalHeight);
+        else if (width <= 0 && height <= 0)
+        {
+            width = originalWidth;
+            height = originalHeight;
+        }
+
+        return ((int)Math.Max(1, Math.Round(width)), (int)Math.Max(1, Math.Round(height)));
     }
 
     internal static partial void ResetNativeText(Editor editor, string text, int cursorPosition) { }
@@ -68,18 +102,19 @@ internal static partial class TextFormatter
 
     internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved) { }
     internal static partial void UnsubscribeCursorChanged(Editor editor) { }
+    internal static partial void SubscribeUndoHandler(Editor editor, Func<bool> onUndoRequested) { }
+    internal static partial void UnsubscribeUndoHandler(Editor editor) { }
     private static readonly Dictionary<Editor, (Android.Widget.EditText editText, ContentReceiver receiver)>
         pasteHandlers = [];
 
-    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted)
+    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[], int> onImagePasteRequested)
     {
         if (editor.Handler?.PlatformView is not Android.Widget.EditText editText) return;
 
-        var receiver = new ContentReceiver(editText, onImagePasted);
+        var receiver = new ContentReceiver(editText, onImagePasteRequested);
         ViewCompat.SetOnReceiveContentListener(editText, ContentReceiver.MimeTypes, receiver);
 
-        if (editText is PasteAwareEditText pasteAwareEditText)
-            pasteAwareEditText.OnImagePasted = onImagePasted;
+        if (editText is PasteAwareEditText pasteAwareEditText) pasteAwareEditText.OnImagePasted = onImagePasteRequested;
 
         pasteHandlers[editor] = (editText, receiver);
     }
@@ -89,19 +124,19 @@ internal static partial class TextFormatter
         if (!pasteHandlers.TryGetValue(editor, out var entry)) return;
         ViewCompat.SetOnReceiveContentListener(entry.editText, ContentReceiver.MimeTypes, null);
 
-        if (entry.editText is PasteAwareEditText pasteAwareEditText)
-            pasteAwareEditText.OnImagePasted = null;
+        if (entry.editText is PasteAwareEditText pasteAwareEditText) pasteAwareEditText.OnImagePasted = null;
 
         pasteHandlers.Remove(editor);
     }
 
-    private class ContentReceiver(Android.Widget.EditText editText, Action<byte[]> onImagePasted)
+    private class ContentReceiver(Android.Widget.EditText editText, Action<byte[], int> onImagePasteRequested)
         : Java.Lang.Object, IOnReceiveContentListener
     {
         internal static readonly string[] MimeTypes = ["image/*"];
 
         public AndroidX.Core.View.ContentInfoCompat OnReceiveContent(Android.Views.View view, AndroidX.Core.View.ContentInfoCompat payload)
         {
+            int cursorPosition = Math.Max(0, editText.SelectionStart);
             var split = payload.Partition(new UriPredicate());
             var uriContent = split.First as AndroidX.Core.View.ContentInfoCompat;
             var remaining = split.Second as AndroidX.Core.View.ContentInfoCompat;
@@ -127,8 +162,7 @@ internal static partial class TextFormatter
                         inputStream.CopyTo(memoryStream);
                         byte[] imageData = memoryStream.ToArray();
 
-                        if (imageData.Length > 0)
-                            editText.Post(() => onImagePasted(imageData));
+                        if (imageData.Length > 0) editText.Post(() => onImagePasteRequested(imageData, cursorPosition));
                     }
                     catch (Exception) { }
                 }
@@ -191,8 +225,6 @@ internal static partial class TextFormatter
         targetNativeView.GetLocationOnScreen(targetLocation);
 
         float density = sourceNativeView.Resources?.DisplayMetrics?.Density ?? 1f;
-        return new Microsoft.Maui.Graphics.Point(
-            (sourceLocation[0] - targetLocation[0]) / density,
-            (sourceLocation[1] - targetLocation[1]) / density);
+        return new Microsoft.Maui.Graphics.Point((sourceLocation[0] - targetLocation[0]) / density, (sourceLocation[1] - targetLocation[1]) / density);
     }
 }

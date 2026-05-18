@@ -38,7 +38,7 @@ public partial class MainPage : ContentPage
         InitializeComponent();
         SuggestingBoxControl.SuggestionRequested += OnSuggestionRequested;
         SuggestingBoxControl.SuggestionChosen += OnSuggestingBoxSuggestionChosen;
-        SuggestingBoxControl.ImageInserted += OnImageInserted;
+        SuggestingBoxControl.ImagePasteRequested += OnImagePasteRequested;
     }
 
     private void OnSuggestingBoxSuggestionChosen(SuggestingBox sender, SuggestionChosenEventArgs args)
@@ -56,12 +56,15 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private void OnImageInserted(SuggestingBox sender, ImageInsertedEventArgs args)
+    private void OnImagePasteRequested(SuggestingBox sender, ImagePasteRequestedEventArgs args)
     {
-        ImageStatusLabel.Text = $"Image pasted: {args.ImageData.Length:N0} bytes";
+        ImageStatusLabel.Text = $"Image paste requested: {args.ImageData.Length:N0} bytes ({args.ContentType})";
         ImageStatusLabel.TextColor = Colors.Green;
         PastedImage.Source = ImageSource.FromStream(() => new MemoryStream(args.ImageData));
         PastedImage.IsVisible = true;
+        args.AlternativeText = "Pasted image";
+        args.WidthRequest = 180;
+        args.InsertImageImmediately = true;
     }
 
     private void OnSuggestionRequested(SuggestingBox sender, SuggestionRequestedEventArgs args)
@@ -75,11 +78,14 @@ public partial class MainPage : ContentPage
     {
         var tokenInfos = SuggestingBoxControl.GetTokens();
         TokenListView.ItemsSource = tokenInfos
-            .Select(token =>
-                $"[{token.StartIndex}..{token.StartIndex + token.Prefix.Length + token.DisplayText.Length}] " +
-                $"{token.Prefix}{token.DisplayText}")
+            .Select(FormatTokenInfo)
             .ToList();
     }
+
+    private static string FormatTokenInfo(SuggestingBoxTokenInfo token) =>
+        token.Kind == SuggestingBoxTokenKind.Image
+            ? $"[{token.StartIndex}..{token.EndIndex}] image ({token.ContentType}, {token.ImageData.Length:N0} bytes)"
+            : $"[{token.StartIndex}..{token.EndIndex}] {token.Prefix}{token.DisplayText}";
 
     private void OnSaveClicked(object sender, EventArgs eventArgs)
     {

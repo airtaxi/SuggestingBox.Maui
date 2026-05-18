@@ -4,6 +4,8 @@
 
 🌐 [English](README.md)
 
+v1에서 이전하시나요? [마이그레이션 가이드](MIGRATION.ko.md)를 확인하세요.
+
 .NET MAUI용 인라인 멘션/태그 제안 컨트롤입니다. 접두 문자(예: `@`, `#`)를 입력하면 제안 팝업이 나타나고, 선택한 항목은 서식이 적용된 불변 토큰으로 에디터에 삽입됩니다.
 
 ## 📷 Showcase
@@ -16,7 +18,7 @@
 - **서식 토큰** — 선택된 제안은 배경색, 글자색, 굵기를 커스터마이징할 수 있는 스타일 토큰이 됩니다.
 - **토큰 원자적 동작** — 토큰은 불변 단위로 동작합니다. 커서가 토큰을 건너뛰고, 삭제 시 토큰 전체가 제거됩니다.
 - **토큰 추출 및 복원** — `GetTokens()`와 `SetContent()`를 사용하여 토큰을 포함한 에디터 상태를 직렬화/역직렬화할 수 있습니다.
-- **이미지 붙여넣기 감지** — 에디터에 이미지가 붙여넣어지면 `ImageInserted` 이벤트가 발생합니다.
+- **이미지 붙여넣기 요청** — 이미지가 붙여넣어지면 `ImagePasteRequested` 이벤트를 받고, 앱 코드가 명시적으로 이미지 토큰 삽입 여부를 결정합니다.
 - **크로스 플랫폼** — Android, iOS, macOS Catalyst, Windows를 지원합니다.
 
 ## 지원 플랫폼
@@ -97,7 +99,7 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 |---|---|---|
 | `SuggestionRequested` | `SuggestionRequestedEventArgs` | 접두 문자가 감지되면 발생. `ItemsSource`를 필터링하여 설정합니다. |
 | `SuggestionChosen` | `SuggestionChosenEventArgs` | 제안이 선택되면 발생. `DisplayText`와 `Format`을 설정합니다. |
-| `ImageInserted` | `ImageInsertedEventArgs` | 에디터에 이미지가 붙여넣어지면 발생. |
+| `ImagePasteRequested` | `ImagePasteRequestedEventArgs` | 이미지가 붙여넣어지면 발생. 삽입하려면 `InsertImageImmediately = true`로 설정하거나 `InsertImageToken(...)`을 호출합니다. |
 
 ### 메서드
 
@@ -105,6 +107,8 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 |---|---|
 | `GetTokens()` | 현재 토큰 목록을 `IReadOnlyList<SuggestingBoxTokenInfo>`로 반환합니다. |
 | `SetContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokens)` | 주어진 텍스트와 토큰으로 에디터 상태를 복원합니다. |
+| `InsertImageToken(byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)` | 현재 커서 위치에 이미지 토큰을 삽입합니다. 두 크기 값이 모두 `-1`이면 원본 이미지 크기를 사용합니다. |
+| `InsertImageToken(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)` | 지정한 텍스트 위치에 이미지 토큰을 삽입합니다. 한쪽 크기만 지정하면 원본 비율로 나머지를 계산합니다. |
 
 #### 예제: `GetTokens()`로 토큰 추출
 
@@ -112,10 +116,22 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 var tokens = SuggestingBoxControl.GetTokens();
 foreach (var token in tokens)
 {
-    Console.WriteLine(
-        $"[{token.StartIndex}..{token.StartIndex + token.Prefix.Length + token.DisplayText.Length}] " +
-        $"{token.Prefix}{token.DisplayText}");
+    Console.WriteLine(token.Kind == SuggestingBoxTokenKind.Image
+        ? $"[{token.StartIndex}..{token.EndIndex}] image ({token.ContentType})"
+        : $"[{token.StartIndex}..{token.EndIndex}] {token.Prefix}{token.DisplayText}");
 }
+```
+
+#### 예제: 붙여넣은 이미지 명시적 삽입
+
+```csharp
+SuggestingBoxControl.ImagePasteRequested += (sender, args) =>
+{
+    // 여기에서 이미지 검증, 리사이즈, 업로드, 거절 등을 결정합니다.
+    args.AlternativeText = "Pasted image";
+    args.WidthRequest = 180;
+    args.InsertImageImmediately = true;
+};
 ```
 
 #### 예제: `SetContent()`로 저장 및 복원

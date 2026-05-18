@@ -1,7 +1,9 @@
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
 using WinFormatEffect = Microsoft.UI.Text.FormatEffect;
 
@@ -9,13 +11,58 @@ namespace SuggestingBox.Maui;
 
 internal static partial class TextFormatter
 {
+    private static readonly Dictionary<RichEditBox, string> s_imageLayoutSignatures = [];
+    private static readonly Dictionary<RichEditBox, double> s_lastKnownEditorHeights = [];
+
     internal static partial void ApplyFormatting(Editor editor, IReadOnlyList<SuggestionToken> tokens)
     {
-        if (editor.Handler?.PlatformView is not RichEditBox richEditBox) return;
+        if (editor.Handler is not FormattedEditorHandler formattedEditorHandler) return;
+        if (formattedEditorHandler.PlatformView is not RichEditBox richEditBox) return;
 
         var document = richEditBox.Document;
-        document.GetText(TextGetOptions.None, out string fullText);
-        int textLength = fullText.TrimEnd('\r', '\n').Length;
+        var hasImages = tokens.Any(token => token.IsImage);
+        var cursorPosition = 0;
+        var textLength = 0;
+        var shouldInsertImages = false;
+        var imageLayoutSignature = string.Empty;
+        var editorText = editor.Text ?? string.Empty;
+
+        void ResetDocumentText()
+        {
+            document.SetText(TextSetOptions.None, editorText);
+            document.Selection.SetRange(cursorPosition, cursorPosition);
+        }
+
+        void InsertImageTokens()
+        {
+            foreach (var token in tokens.Where(token => token.IsImage)) InsertImageToken(richEditBox, token, textLength);
+        }
+
+        if (hasImages)
+        {
+            RememberEditorHeight(richEditBox);
+            cursorPosition = Math.Min(document.Selection.StartPosition, editorText.Length);
+            imageLayoutSignature = GetImageLayoutSignature(tokens);
+            shouldInsertImages = !s_imageLayoutSignatures.TryGetValue(richEditBox, out var currentSignature) || currentSignature != imageLayoutSignature;
+
+            if (shouldInsertImages)
+            {
+                FreezeEditorHeight(richEditBox);
+                formattedEditorHandler.RunIgnoringTextChange(ResetDocumentText);
+            }
+
+            textLength = editorText.Length;
+        }
+        else
+        {
+            s_imageLayoutSignatures.Remove(richEditBox);
+            s_lastKnownEditorHeights.Remove(richEditBox);
+            richEditBox.MinHeight = 0;
+            document.GetText(TextGetOptions.UseLf, out var fullText);
+            textLength = fullText.Length;
+            cursorPosition = Math.Min(document.Selection.StartPosition, textLength);
+        }
+
         if (textLength <= 0) return;
 
         // Use the document's default character format for reset values (theme-aware)
@@ -30,6 +77,7 @@ internal static partial class TextFormatter
         foreach (var token in tokens)
         {
             if (token.StartIndex < 0 || token.EndIndex > textLength) continue;
+            if (token.IsImage) continue;
 
             var range = document.GetRange(token.StartIndex, token.EndIndex);
             var format = token.Format;
@@ -37,25 +85,29 @@ internal static partial class TextFormatter
             if (format.BackgroundColor != Colors.Transparent)
             {
                 var color = format.BackgroundColor;
-                range.CharacterFormat.BackgroundColor = Windows.UI.Color.FromArgb(
-                    (byte)(color.Alpha * 255), (byte)(color.Red * 255),
-                    (byte)(color.Green * 255), (byte)(color.Blue * 255));
+                range.CharacterFormat.BackgroundColor = Windows.UI.Color.FromArgb((byte)(color.Alpha * 255), (byte)(color.Red * 255), (byte)(color.Green * 255), (byte)(color.Blue * 255));
             }
 
             if (format.ForegroundColor != Colors.Black)
             {
                 var color = format.ForegroundColor;
-                range.CharacterFormat.ForegroundColor = Windows.UI.Color.FromArgb(
-                    (byte)(color.Alpha * 255), (byte)(color.Red * 255),
-                    (byte)(color.Green * 255), (byte)(color.Blue * 255));
+                range.CharacterFormat.ForegroundColor = Windows.UI.Color.FromArgb((byte)(color.Alpha * 255), (byte)(color.Red * 255), (byte)(color.Green * 255), (byte)(color.Blue * 255));
             }
 
             if (format.Bold == FormatEffect.On)
                 range.CharacterFormat.Bold = WinFormatEffect.On;
         }
 
+        if (shouldInsertImages)
+        {
+            formattedEditorHandler.RunIgnoringTextChange(InsertImageTokens);
+            s_imageLayoutSignatures[richEditBox] = imageLayoutSignature;
+            RememberEditorHeightAfterLayout(richEditBox);
+        }
+
         // Reset formatting at the current insertion point (selection) so subsequently typed text
         // does not inherit the last token's character format.
+        document.Selection.SetRange(cursorPosition, cursorPosition);
         var selection = document.Selection;
         if (selection.StartPosition == selection.EndPosition)
         {
@@ -65,6 +117,97 @@ internal static partial class TextFormatter
         }
     }
 
+    private static string GetImageLayoutSignature(IReadOnlyList<SuggestionToken> tokens) =>
+        string.Join("|", tokens.Where(token => token.IsImage).Select(CreateImageLayoutSignature));
+
+    private static string CreateImageLayoutSignature(SuggestionToken token) =>
+        $"{token.StartIndex}:{RuntimeHelpers.GetHashCode(token.ImageData)}:{token.ImageData.Length}:{token.ContentType}:{token.AlternativeText}:{token.WidthRequest}:{token.HeightRequest}";
+
+    internal static void InvalidateImageLayout(RichEditBox richEditBox) => s_imageLayoutSignatures.Remove(richEditBox);
+
+    private static void RememberEditorHeight(RichEditBox richEditBox)
+    {
+        if (richEditBox.ActualHeight <= 0) return;
+        s_lastKnownEditorHeights[richEditBox] = Math.Max(s_lastKnownEditorHeights.GetValueOrDefault(richEditBox), richEditBox.ActualHeight);
+    }
+
+    private static void FreezeEditorHeight(RichEditBox richEditBox)
+    {
+        if (!s_lastKnownEditorHeights.TryGetValue(richEditBox, out var lastKnownEditorHeight)) return;
+        if (lastKnownEditorHeight <= 0) return;
+        richEditBox.MinHeight = Math.Max(richEditBox.MinHeight, lastKnownEditorHeight);
+    }
+
+    private static void RememberEditorHeightAfterLayout(RichEditBox richEditBox)
+    {
+        richEditBox.DispatcherQueue.TryEnqueue(() =>
+        {
+            richEditBox.UpdateLayout();
+            RememberEditorHeight(richEditBox);
+            FreezeEditorHeight(richEditBox);
+        });
+    }
+
+    private static void InsertImageToken(RichEditBox richEditBox, SuggestionToken token, int textLength)
+    {
+        if (token.StartIndex < 0 || token.EndIndex > textLength || token.ImageData.Length == 0) return;
+
+        try
+        {
+            using var stream = CreateImageStream(token.ImageData);
+            var (width, height) = GetImageSize(token, stream);
+            stream.Seek(0);
+
+            int imageAscent = Math.Max(1, height);
+            var range = richEditBox.Document.GetRange(token.StartIndex, token.EndIndex);
+            range.InsertImage(width, height, imageAscent, VerticalCharacterAlignment.Baseline, token.AlternativeText ?? string.Empty, stream);
+        }
+        catch (Exception) { }
+    }
+
+    private static InMemoryRandomAccessStream CreateImageStream(byte[] imageData)
+    {
+        var stream = new InMemoryRandomAccessStream();
+        using var outputStream = stream.GetOutputStreamAt(0);
+        using var dataWriter = new DataWriter(outputStream);
+        dataWriter.WriteBytes(imageData);
+        dataWriter.StoreAsync().AsTask().GetAwaiter().GetResult();
+        dataWriter.FlushAsync().AsTask().GetAwaiter().GetResult();
+        return stream;
+    }
+
+    private static (int Width, int Height) GetImageSize(SuggestionToken token, IRandomAccessStream stream)
+    {
+        double imageWidth = token.WidthRequest;
+        double imageHeight = token.HeightRequest;
+
+        if (imageWidth <= 0 || imageHeight <= 0)
+        {
+            try
+            {
+                stream.Seek(0);
+                var decoder = BitmapDecoder.CreateAsync(stream).AsTask().GetAwaiter().GetResult();
+                double originalWidth = decoder.PixelWidth;
+                double originalHeight = decoder.PixelHeight;
+
+                if (imageWidth > 0 && imageHeight <= 0) imageHeight = originalHeight * (imageWidth / originalWidth);
+                else if (imageHeight > 0 && imageWidth <= 0) imageWidth = originalWidth * (imageHeight / originalHeight);
+                else
+                {
+                    imageWidth = originalWidth;
+                    imageHeight = originalHeight;
+                }
+            }
+            catch (Exception)
+            {
+                if (imageWidth <= 0) imageWidth = 160;
+                if (imageHeight <= 0) imageHeight = 90;
+            }
+        }
+
+        return ((int)Math.Max(1, Math.Round(imageWidth)), (int)Math.Max(1, Math.Round(imageHeight)));
+    }
+
     internal static partial void ResetNativeText(Editor editor, string text, int cursorPosition)
     {
         if (editor.Handler?.PlatformView is not RichEditBox richEditBox) return;
@@ -72,16 +215,14 @@ internal static partial class TextFormatter
         // Set cursor position directly on the native RichEditBox — MAUI's editor.CursorPosition
         // assignment on Windows sometimes lands at the wrong position (e.g. right after # or @)
         // because the handler defers or clamps the position.
-        richEditBox.Document.Selection.SetRange(
-            Math.Min(cursorPosition, text.Length),
-            Math.Min(cursorPosition, text.Length));
+        richEditBox.Document.Selection.SetRange(Math.Min(cursorPosition, text.Length), Math.Min(cursorPosition, text.Length));
     }
 
     private static readonly Dictionary<Editor, (RichEditBox richEditBox, RoutedEventHandler handler)>
-        cursorHandlers = [];
+        s_cursorHandlers = [];
 
     private static readonly Dictionary<Editor, (RichEditBox richEditBox, TextControlPasteEventHandler handler)>
-        pasteHandlers = [];
+        s_pasteHandlers = [];
 
     internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved)
     {
@@ -101,14 +242,14 @@ internal static partial class TextFormatter
         }
 
         richEditBox.SelectionChanged += selectionChangedHandler;
-        cursorHandlers[editor] = (richEditBox, selectionChangedHandler);
+        s_cursorHandlers[editor] = (richEditBox, selectionChangedHandler);
     }
 
     internal static partial void UnsubscribeCursorChanged(Editor editor)
     {
-        if (!cursorHandlers.TryGetValue(editor, out var entry)) return;
+        if (!s_cursorHandlers.TryGetValue(editor, out var entry)) return;
         entry.richEditBox.SelectionChanged -= entry.handler;
-        cursorHandlers.Remove(editor);
+        s_cursorHandlers.Remove(editor);
     }
 
     internal static partial double GetCursorBottomY(Editor editor)
@@ -164,7 +305,7 @@ internal static partial class TextFormatter
         return totalHeight;
     }
 
-    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted)
+    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[], int> onImagePasteRequested)
     {
         if (editor.Handler?.PlatformView is not RichEditBox richEditBox) return;
 
@@ -175,6 +316,7 @@ internal static partial class TextFormatter
 
             // Block the image from being inserted into the RichEditBox
             eventArgs.Handled = true;
+            int cursorPosition = Math.Min(richEditBox.Document.Selection.StartPosition, (editor.Text ?? string.Empty).Length);
 
             Task.Run(async () =>
             {
@@ -185,19 +327,33 @@ internal static partial class TextFormatter
                 await reader.LoadAsync((uint)stream.Size);
                 reader.ReadBytes(imageData);
 
-                richEditBox.DispatcherQueue.TryEnqueue(() => onImagePasted(imageData));
+                richEditBox.DispatcherQueue.TryEnqueue(() => onImagePasteRequested(imageData, cursorPosition));
             });
         }
 
         richEditBox.Paste += pasteHandler;
-        pasteHandlers[editor] = (richEditBox, pasteHandler);
+        s_pasteHandlers[editor] = (richEditBox, pasteHandler);
     }
 
     internal static partial void UnsubscribePasteHandler(Editor editor)
     {
-        if (!pasteHandlers.TryGetValue(editor, out var entry)) return;
+        if (!s_pasteHandlers.TryGetValue(editor, out var entry)) return;
         entry.richEditBox.Paste -= entry.handler;
-        pasteHandlers.Remove(editor);
+        s_imageLayoutSignatures.Remove(entry.richEditBox);
+        s_lastKnownEditorHeights.Remove(entry.richEditBox);
+        s_pasteHandlers.Remove(editor);
+    }
+
+    internal static partial void SubscribeUndoHandler(Editor editor, Func<bool> onUndoRequested)
+    {
+        if (editor.Handler is not FormattedEditorHandler formattedEditorHandler) return;
+        formattedEditorHandler.UndoRequested = onUndoRequested;
+    }
+
+    internal static partial void UnsubscribeUndoHandler(Editor editor)
+    {
+        if (editor.Handler is not FormattedEditorHandler formattedEditorHandler) return;
+        formattedEditorHandler.UndoRequested = null;
     }
 
     private static T FindDescendant<T>(DependencyObject parent) where T : DependencyObject

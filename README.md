@@ -4,6 +4,8 @@
 
 🌐 [한국어](README.ko.md)
 
+Migrating from v1? See the [migration guide](MIGRATION.md).
+
 A .NET MAUI control that provides inline mention/tag suggestion functionality with formatted tokens. Type a prefix character (e.g., `@` or `#`) and get a popup suggestion list — selected items become styled, immutable tokens embedded in the editor.
 
 ## 📷 Showcase
@@ -16,7 +18,7 @@ A .NET MAUI control that provides inline mention/tag suggestion functionality wi
 - **Formatted tokens** — Chosen suggestions become styled tokens with customizable background color, foreground color, and bold formatting.
 - **Atomic token behavior** — Tokens are immutable units; cursor navigation skips over them and deletion removes the entire token.
 - **Token extraction & restoration** — Use `GetTokens()` and `SetContent()` to serialize/deserialize editor state including tokens.
-- **Image paste detection** — Receive `ImageInserted` events when images are pasted into the editor.
+- **Image paste requests** — Receive `ImagePasteRequested` events and explicitly choose whether to insert pasted images as inline tokens.
 - **Cross-platform** — Supports Android, iOS, macOS Catalyst, and Windows.
 
 ## Supported Platforms
@@ -97,7 +99,7 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 |---|---|---|
 | `SuggestionRequested` | `SuggestionRequestedEventArgs` | Fired when a prefix is detected. Use to filter and set `ItemsSource`. |
 | `SuggestionChosen` | `SuggestionChosenEventArgs` | Fired when a suggestion is selected. Set `DisplayText` and `Format`. |
-| `ImageInserted` | `ImageInsertedEventArgs` | Fired when an image is pasted into the editor. |
+| `ImagePasteRequested` | `ImagePasteRequestedEventArgs` | Fired when an image is pasted. Set `InsertImageImmediately = true` or call `InsertImageToken(...)` to insert it. |
 
 ### Methods
 
@@ -105,6 +107,8 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 |---|---|
 | `GetTokens()` | Returns `IReadOnlyList<SuggestingBoxTokenInfo>` of current tokens. |
 | `SetContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokens)` | Restores the editor with the given text and tokens. |
+| `InsertImageToken(byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)` | Inserts an image token at the current cursor position. If both size values are `-1`, the original image size is used. |
+| `InsertImageToken(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)` | Inserts an image token at the specified text position. If one size value is set, the other is inferred from the original aspect ratio. |
 
 #### Example: Extracting tokens with `GetTokens()`
 
@@ -112,10 +116,22 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 var tokens = SuggestingBoxControl.GetTokens();
 foreach (var token in tokens)
 {
-    Console.WriteLine(
-        $"[{token.StartIndex}..{token.StartIndex + token.Prefix.Length + token.DisplayText.Length}] " +
-        $"{token.Prefix}{token.DisplayText}");
+    Console.WriteLine(token.Kind == SuggestingBoxTokenKind.Image
+        ? $"[{token.StartIndex}..{token.EndIndex}] image ({token.ContentType})"
+        : $"[{token.StartIndex}..{token.EndIndex}] {token.Prefix}{token.DisplayText}");
 }
+```
+
+#### Example: Inserting pasted images explicitly
+
+```csharp
+SuggestingBoxControl.ImagePasteRequested += (sender, args) =>
+{
+    // Validate, resize, upload, or reject the image here.
+    args.AlternativeText = "Pasted image";
+    args.WidthRequest = 180;
+    args.InsertImageImmediately = true;
+};
 ```
 
 #### Example: Saving and restoring with `SetContent()`

@@ -5,7 +5,7 @@ namespace SuggestingBox.Maui;
 
 internal class PasteAwareEditText : MauiAppCompatEditText
 {
-    internal Action<byte[]> OnImagePasted { get; set; }
+    internal Action<byte[], int> OnImagePasted { get; set; }
 
     public PasteAwareEditText(Context context) : base(context) { }
 
@@ -25,6 +25,7 @@ internal class PasteAwareEditText : MauiAppCompatEditText
         var clipData = clipboardManager.PrimaryClip;
         if (clipData is null) return false;
 
+        int cursorPosition = Math.Max(0, SelectionStart);
         for (int index = 0; index < clipData.ItemCount; index++)
         {
             var uri = clipData.GetItemAt(index)?.Uri;
@@ -45,7 +46,7 @@ internal class PasteAwareEditText : MauiAppCompatEditText
 
                 if (imageData.Length > 0)
                 {
-                    Post(() => OnImagePasted(imageData));
+                    Post(() => OnImagePasted(imageData, cursorPosition));
                     return true;
                 }
             }

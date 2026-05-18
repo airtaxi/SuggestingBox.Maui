@@ -6,10 +6,13 @@ namespace SuggestingBox.Maui;
 
 public class SuggestingBox : ContentView
 {
+    private const int MaximumUndoSnapshotCount = 100;
+
     private readonly FormattedEditor editor;
     private readonly CollectionView suggestionListView;
     private readonly Border suggestionPopup;
     private readonly List<SuggestionToken> tokens = [];
+    private readonly List<UndoSnapshot> _undoHistory = [];
     private AbsoluteLayout overlayLayer;
     private ContentView backgroundDismissLayer;
     private string currentPrefix = string.Empty;
@@ -18,6 +21,9 @@ public class SuggestingBox : ContentView
     private bool isUpdatingText;
     private int textChangeGeneration;
     private bool hasPendingTokenDeletion;
+    private bool _isApplyingUndoSnapshot;
+    private bool _isCustomUndoEnabled;
+    private UndoActionKind _lastUndoActionKind;
     private double measuredItemHeight;
     private int measureRetryCount;
     private int lastKnownCursorPosition = -1;
@@ -26,28 +32,22 @@ public class SuggestingBox : ContentView
         BindableProperty.Create(nameof(Prefixes), typeof(string), typeof(SuggestingBox), string.Empty);
 
     public static readonly BindableProperty ItemsSourceProperty =
-        BindableProperty.Create(nameof(ItemsSource), typeof(IEnumerable), typeof(SuggestingBox), null,
-            propertyChanged: OnItemsSourceChanged);
+        BindableProperty.Create(nameof(ItemsSource), typeof(IEnumerable), typeof(SuggestingBox), null, propertyChanged: OnItemsSourceChanged);
 
     public static readonly BindableProperty ItemTemplateProperty =
-        BindableProperty.Create(nameof(ItemTemplate), typeof(DataTemplate), typeof(SuggestingBox), null,
-            propertyChanged: OnItemTemplateChanged);
+        BindableProperty.Create(nameof(ItemTemplate), typeof(DataTemplate), typeof(SuggestingBox), null, propertyChanged: OnItemTemplateChanged);
 
     public static readonly BindableProperty TextProperty =
-        BindableProperty.Create(nameof(Text), typeof(string), typeof(SuggestingBox), string.Empty,
-            BindingMode.TwoWay, propertyChanged: OnTextPropertyChanged);
+        BindableProperty.Create(nameof(Text), typeof(string), typeof(SuggestingBox), string.Empty, BindingMode.TwoWay, propertyChanged: OnTextPropertyChanged);
 
     public static readonly BindableProperty PlaceholderProperty =
-        BindableProperty.Create(nameof(Placeholder), typeof(string), typeof(SuggestingBox), string.Empty,
-            propertyChanged: OnPlaceholderPropertyChanged);
+        BindableProperty.Create(nameof(Placeholder), typeof(string), typeof(SuggestingBox), string.Empty, propertyChanged: OnPlaceholderPropertyChanged);
 
     public static readonly BindableProperty MaxSuggestionHeightProperty =
-        BindableProperty.Create(nameof(MaxSuggestionHeight), typeof(double), typeof(SuggestingBox), 200.0,
-            propertyChanged: OnSuggestionHeightPropertyChanged);
+        BindableProperty.Create(nameof(MaxSuggestionHeight), typeof(double), typeof(SuggestingBox), 200.0, propertyChanged: OnSuggestionHeightPropertyChanged);
 
     public static readonly BindableProperty DisableInputAccessoryViewProperty =
-        BindableProperty.Create(nameof(DisableInputAccessoryView), typeof(bool), typeof(SuggestingBox), true,
-            propertyChanged: OnDisableInputAccessoryViewPropertyChanged);
+        BindableProperty.Create(nameof(DisableInputAccessoryView), typeof(bool), typeof(SuggestingBox), true, propertyChanged: OnDisableInputAccessoryViewPropertyChanged);
 
     public static readonly BindableProperty SuggestionRequestedCommandProperty =
         BindableProperty.Create(nameof(SuggestionRequestedCommand), typeof(ICommand), typeof(SuggestingBox));
@@ -55,8 +55,8 @@ public class SuggestingBox : ContentView
     public static readonly BindableProperty SuggestionChosenCommandProperty =
         BindableProperty.Create(nameof(SuggestionChosenCommand), typeof(ICommand), typeof(SuggestingBox));
 
-    public static readonly BindableProperty ImageInsertedCommandProperty =
-        BindableProperty.Create(nameof(ImageInsertedCommand), typeof(ICommand), typeof(SuggestingBox));
+    public static readonly BindableProperty ImagePasteRequestedCommandProperty =
+        BindableProperty.Create(nameof(ImagePasteRequestedCommand), typeof(ICommand), typeof(SuggestingBox));
 
     public static readonly BindableProperty TextChangedCommandProperty =
         BindableProperty.Create(nameof(TextChangedCommand), typeof(ICommand), typeof(SuggestingBox));
@@ -119,10 +119,10 @@ public class SuggestingBox : ContentView
         set => SetValue(SuggestionChosenCommandProperty, value);
     }
 
-    public ICommand ImageInsertedCommand
+    public ICommand ImagePasteRequestedCommand
     {
-        get => (ICommand)GetValue(ImageInsertedCommandProperty);
-        set => SetValue(ImageInsertedCommandProperty, value);
+        get => (ICommand)GetValue(ImagePasteRequestedCommandProperty);
+        set => SetValue(ImagePasteRequestedCommandProperty, value);
     }
 
     public ICommand TextChangedCommand
@@ -133,8 +133,22 @@ public class SuggestingBox : ContentView
 
     public event SuggestingBoxEventHandler<SuggestionChosenEventArgs> SuggestionChosen;
     public event SuggestingBoxEventHandler<SuggestionRequestedEventArgs> SuggestionRequested;
-    public event SuggestingBoxEventHandler<ImageInsertedEventArgs> ImageInserted;
+    public event SuggestingBoxEventHandler<ImagePasteRequestedEventArgs> ImagePasteRequested;
     public event EventHandler<TextChangedEventArgs> TextChanged;
+
+    private enum UndoActionKind
+    {
+        None,
+        Text,
+        Token
+    }
+
+    private sealed class UndoSnapshot(string text, IReadOnlyList<SuggestingBoxTokenInfo> tokenInfos, int cursorPosition)
+    {
+        public string Text { get; } = text;
+        public IReadOnlyList<SuggestingBoxTokenInfo> TokenInfos { get; } = tokenInfos;
+        public int CursorPosition { get; } = cursorPosition;
+    }
 
     public SuggestingBox()
     {
@@ -195,12 +209,14 @@ public class SuggestingBox : ContentView
         if (editor.Handler is not null)
         {
             TextFormatter.SubscribeCursorChanged(editor, OnNativeCursorChanged);
-            TextFormatter.SubscribePasteHandler(editor, RaiseImageInserted);
+            TextFormatter.SubscribePasteHandler(editor, RaiseImagePasteRequested);
+            TextFormatter.SubscribeUndoHandler(editor, TryUndoFromHistory);
         }
         else
         {
             TextFormatter.UnsubscribeCursorChanged(editor);
             TextFormatter.UnsubscribePasteHandler(editor);
+            TextFormatter.UnsubscribeUndoHandler(editor);
         }
     }
 
@@ -209,8 +225,7 @@ public class SuggestingBox : ContentView
         if (isUpdatingText || hasPendingTokenDeletion || tokens.Count == 0) return;
 
         string text = editor.Text ?? string.Empty;
-        var tokenAtCursor = tokens.FirstOrDefault(
-            token => newPosition > token.StartIndex && newPosition < token.EndIndex);
+        var tokenAtCursor = tokens.FirstOrDefault(token => newPosition > token.StartIndex && newPosition < token.EndIndex);
 
         if (tokenAtCursor is null) return;
 
@@ -243,48 +258,200 @@ public class SuggestingBox : ContentView
     }
 
     public IReadOnlyList<SuggestingBoxTokenInfo> GetTokens() =>
-        tokens.Select(token => new SuggestingBoxTokenInfo(
-            token.StartIndex, token.Prefix, token.DisplayText,
-            new SuggestionFormat
-            {
-                BackgroundColor = token.Format.BackgroundColor,
-                ForegroundColor = token.Format.ForegroundColor,
-                Bold = token.Format.Bold
-            }, token.Item)).ToList();
+        tokens.OrderBy(token => token.StartIndex).Select(token => token.ToInfo()).ToList();
 
     public void SetContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokenInfos)
     {
-        isUpdatingText = true;
-
-        tokens.Clear();
-        foreach (var tokenInfo in tokenInfos.OrderBy(tokenInfo => tokenInfo.StartIndex))
-            tokens.Add(new SuggestionToken(
-                tokenInfo.StartIndex,
-                tokenInfo.Prefix,
-                tokenInfo.DisplayText,
-                new SuggestionFormat
-                {
-                    BackgroundColor = tokenInfo.Format.BackgroundColor,
-                    ForegroundColor = tokenInfo.Format.ForegroundColor,
-                    Bold = tokenInfo.Format.Bold
-                }, tokenInfo.Item));
-
-        editor.Text = text;
-        Text = text;
-        TextFormatter.ResetNativeText(editor, text, text.Length);
-        isUpdatingText = false;
-
-        if (tokens.Count > 0)
-            ScheduleFormatting();
+        ClearUndoHistory();
+        ApplyContent(text, tokenInfos);
+        _isCustomUndoEnabled = tokens.Any(token => token.IsImage);
     }
 
-    public void RaiseImageInserted(byte[] imageData)
+    private void ApplyContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokenInfos, int? cursorPosition = null)
     {
-        var eventArgs = new ImageInsertedEventArgs(imageData);
-        ImageInserted?.Invoke(this, eventArgs);
-        if (ImageInsertedCommand is ICommand imageInsertedCommand
-            && imageInsertedCommand.CanExecute(eventArgs))
-            imageInsertedCommand.Execute(eventArgs);
+        isUpdatingText = true;
+
+        var normalizedContent = NormalizeContent(text, tokenInfos);
+        int normalizedCursorPosition = Math.Clamp(cursorPosition ?? normalizedContent.Text.Length, 0, normalizedContent.Text.Length);
+        tokens.Clear();
+        tokens.AddRange(normalizedContent.Tokens);
+
+        editor.Text = normalizedContent.Text;
+        Text = normalizedContent.Text;
+        editor.CursorPosition = normalizedCursorPosition;
+        TextFormatter.ResetNativeText(editor, normalizedContent.Text, normalizedCursorPosition);
+        lastKnownCursorPosition = normalizedCursorPosition;
+        isUpdatingText = false;
+
+        if (tokens.Count > 0) ScheduleFormatting();
+    }
+
+    public void InsertImageToken(byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)
+    {
+        int cursorPosition = Math.Min(editor.CursorPosition, (editor.Text ?? string.Empty).Length);
+        InsertImageToken(cursorPosition, imageData, contentType, alternativeText, widthRequest, heightRequest, item);
+    }
+
+    public void InsertImageToken(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)
+    {
+        ArgumentNullException.ThrowIfNull(imageData);
+
+        string text = editor.Text ?? string.Empty;
+        int insertIndex = NormalizeTokenInsertionIndex(startIndex, text);
+
+        RecordUndoSnapshot(text, insertIndex, UndoActionKind.Token, true);
+        _isCustomUndoEnabled = true;
+
+        foreach (var existingToken in tokens.Where(token => token.StartIndex >= insertIndex)) existingToken.StartIndex += SuggestingBoxText.ImagePlaceholderString.Length;
+
+        var imageToken = new SuggestionToken(insertIndex, imageData, contentType, alternativeText, widthRequest, heightRequest, item);
+        tokens.Add(imageToken);
+
+        string newText = text.Insert(insertIndex, SuggestingBoxText.ImagePlaceholderString);
+        int cursorPosition = insertIndex + imageToken.Length;
+
+        isUpdatingText = true;
+        editor.Text = newText;
+        Text = newText;
+        editor.CursorPosition = cursorPosition;
+        TextFormatter.ResetNativeText(editor, newText, cursorPosition);
+        lastKnownCursorPosition = cursorPosition;
+        isUpdatingText = false;
+
+        ScheduleFormatting();
+    }
+
+    public void RaiseImagePasteRequested(byte[] imageData)
+    {
+        int cursorPosition = Math.Min(editor.CursorPosition, (editor.Text ?? string.Empty).Length);
+        RaiseImagePasteRequested(imageData, cursorPosition);
+    }
+
+    private void RaiseImagePasteRequested(byte[] imageData, int cursorPosition)
+    {
+        string contentType = ImageContentTypeDetector.Detect(imageData);
+        string text = editor.Text ?? string.Empty;
+        int normalizedCursorPosition = Math.Clamp(cursorPosition, 0, text.Length);
+        var eventArgs = new ImagePasteRequestedEventArgs(imageData, contentType, normalizedCursorPosition);
+        ImagePasteRequested?.Invoke(this, eventArgs);
+        if (ImagePasteRequestedCommand is ICommand imagePasteRequestedCommand && imagePasteRequestedCommand.CanExecute(eventArgs)) imagePasteRequestedCommand.Execute(eventArgs);
+        if (eventArgs.InsertImageImmediately) InsertImageToken(eventArgs.CursorPosition, eventArgs.ImageData, eventArgs.ContentType, eventArgs.AlternativeText, eventArgs.WidthRequest, eventArgs.HeightRequest, eventArgs.Item);
+    }
+
+    private static (string Text, List<SuggestionToken> Tokens) NormalizeContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokenInfos)
+    {
+        string normalizedText = text ?? string.Empty;
+        var normalizedTokens = new List<SuggestionToken>();
+        int offset = 0;
+
+        foreach (var tokenInfo in (tokenInfos ?? Enumerable.Empty<SuggestingBoxTokenInfo>())
+            .OrderBy(tokenInfo => tokenInfo.StartIndex))
+        {
+            int startIndex = Math.Clamp(tokenInfo.StartIndex + offset, 0, normalizedText.Length);
+
+            if (tokenInfo.Kind == SuggestingBoxTokenKind.Image)
+            {
+                if (startIndex >= normalizedText.Length || normalizedText[startIndex] != SuggestingBoxText.ImagePlaceholder)
+                {
+                    normalizedText = normalizedText.Insert(startIndex, SuggestingBoxText.ImagePlaceholderString);
+                    offset += SuggestingBoxText.ImagePlaceholderString.Length;
+                }
+
+                normalizedTokens.Add(new SuggestionToken(startIndex, tokenInfo.ImageData, tokenInfo.ContentType, tokenInfo.AlternativeText, tokenInfo.WidthRequest, tokenInfo.HeightRequest, tokenInfo.Item));
+                continue;
+            }
+
+            normalizedTokens.Add(new SuggestionToken(startIndex, tokenInfo.Prefix, tokenInfo.DisplayText, new SuggestionFormat { BackgroundColor = tokenInfo.Format?.BackgroundColor ?? Colors.Transparent, ForegroundColor = tokenInfo.Format?.ForegroundColor ?? Colors.Black, Bold = tokenInfo.Format?.Bold ?? FormatEffect.Off }, tokenInfo.Item));
+        }
+
+        return (normalizedText, normalizedTokens);
+    }
+
+    private int NormalizeTokenInsertionIndex(int startIndex, string text)
+    {
+        int insertIndex = Math.Clamp(startIndex, 0, text.Length);
+        var containingToken = tokens.FirstOrDefault(token => insertIndex > token.StartIndex && insertIndex < token.EndIndex);
+        return containingToken?.EndIndex ?? insertIndex;
+    }
+
+    private void RecordUndoSnapshot(string text, int cursorPosition, UndoActionKind actionKind, bool force = false)
+    {
+        if (_isApplyingUndoSnapshot) return;
+        if (!force && actionKind == UndoActionKind.Text && _lastUndoActionKind == UndoActionKind.Text) return;
+
+        int normalizedCursorPosition = Math.Clamp(cursorPosition, 0, text.Length);
+        var tokenInfos = tokens.OrderBy(token => token.StartIndex).Select(token => token.ToInfo()).ToList();
+        if (_undoHistory.Count > 0 && IsSameUndoSnapshot(_undoHistory[^1], text, tokenInfos))
+        {
+            _lastUndoActionKind = actionKind;
+            return;
+        }
+
+        _undoHistory.Add(new UndoSnapshot(text, tokenInfos, normalizedCursorPosition));
+        if (_undoHistory.Count > MaximumUndoSnapshotCount) _undoHistory.RemoveAt(0);
+        _lastUndoActionKind = actionKind;
+    }
+
+    private static bool IsSameUndoSnapshot(UndoSnapshot snapshot, string text, IReadOnlyList<SuggestingBoxTokenInfo> tokenInfos)
+    {
+        if (snapshot.Text != text) return false;
+        if (snapshot.TokenInfos.Count != tokenInfos.Count) return false;
+
+        for (int index = 0; index < tokenInfos.Count; index++)
+        {
+            var leftToken = snapshot.TokenInfos[index];
+            var rightToken = tokenInfos[index];
+            if (leftToken.Kind != rightToken.Kind || leftToken.StartIndex != rightToken.StartIndex) return false;
+            if (leftToken.Kind == SuggestingBoxTokenKind.Image)
+            {
+                if (!ReferenceEquals(leftToken.ImageData, rightToken.ImageData)
+                    || leftToken.ContentType != rightToken.ContentType
+                    || leftToken.AlternativeText != rightToken.AlternativeText
+                    || leftToken.WidthRequest != rightToken.WidthRequest
+                    || leftToken.HeightRequest != rightToken.HeightRequest)
+                {
+                    return false;
+                }
+                continue;
+            }
+
+            if (leftToken.Prefix != rightToken.Prefix || leftToken.DisplayText != rightToken.DisplayText) return false;
+            if (leftToken.Format?.BackgroundColor != rightToken.Format?.BackgroundColor || leftToken.Format?.ForegroundColor != rightToken.Format?.ForegroundColor || leftToken.Format?.Bold != rightToken.Format?.Bold) return false;
+        }
+
+        return true;
+    }
+
+    private bool TryUndoFromHistory()
+    {
+        if (!_isCustomUndoEnabled) return false;
+
+        var currentText = editor.Text ?? string.Empty;
+        var currentTokenInfos = tokens.OrderBy(token => token.StartIndex).Select(token => token.ToInfo()).ToList();
+        _lastUndoActionKind = UndoActionKind.None;
+
+        while (_undoHistory.Count > 0)
+        {
+            var snapshot = _undoHistory[^1];
+            _undoHistory.RemoveAt(_undoHistory.Count - 1);
+
+            if (IsSameUndoSnapshot(snapshot, currentText, currentTokenInfos)) continue;
+
+            _isApplyingUndoSnapshot = true;
+            try { ApplyContent(snapshot.Text, snapshot.TokenInfos, snapshot.CursorPosition); }
+            finally { _isApplyingUndoSnapshot = false; }
+
+            return true;
+        }
+
+        return true;
+    }
+
+    private void ClearUndoHistory()
+    {
+        _undoHistory.Clear();
+        _isCustomUndoEnabled = false;
+        _lastUndoActionKind = UndoActionKind.None;
     }
 
     private void OnThemeChanged(object sender, AppThemeChangedEventArgs args) => UpdateThemeColors();
@@ -322,6 +489,8 @@ public class SuggestingBox : ContentView
 
         string oldText = args.OldTextValue ?? string.Empty;
         string newText = args.NewTextValue ?? string.Empty;
+        int undoCursorPosition = lastKnownCursorPosition >= 0 ? lastKnownCursorPosition : oldText.Length;
+        RecordUndoSnapshot(oldText, undoCursorPosition, UndoActionKind.Text);
 
         // Handle atomic token deletion: when any part of a token is deleted, remove the entire token
         if (HandleTokenDeletion(oldText, newText)) return;
@@ -370,8 +539,7 @@ public class SuggestingBox : ContentView
             int cursorPosition = editor.CursorPosition;
             string text = editor.Text ?? string.Empty;
 
-            var tokenAtCursor = tokens.FirstOrDefault(
-                token => cursorPosition > token.StartIndex && cursorPosition < token.EndIndex);
+            var tokenAtCursor = tokens.FirstOrDefault(token => cursorPosition > token.StartIndex && cursorPosition < token.EndIndex);
 
             if (tokenAtCursor is null) return;
 
@@ -400,10 +568,11 @@ public class SuggestingBox : ContentView
         if (newText.Length > oldText.Length)
         {
             var (insertPosition, _, insertedLength) = FindEditRegion(oldText, newText);
-            var targetToken = tokens.FirstOrDefault(
-                token => insertPosition > token.StartIndex && insertPosition <= token.EndIndex);
+            var targetToken = tokens.FirstOrDefault(token => insertPosition > token.StartIndex && insertPosition <= token.EndIndex);
 
             if (targetToken is null) return false;
+
+            if (targetToken.IsImage && insertPosition == targetToken.EndIndex) return false;
 
             // Allow whitespace inserted exactly at the token end boundary — it falls outside
             // the visible token and does not inherit the token's styling after ScheduleFormatting.
@@ -442,7 +611,7 @@ public class SuggestingBox : ContentView
         foreach (var token in affectedTokens)
         {
             int tokenEnd = token.EndIndex;
-            if (tokenEnd < oldText.Length && oldText[tokenEnd] == ' ')
+            if (token.IsMention && tokenEnd < oldText.Length && oldText[tokenEnd] == ' ')
                 tokenEnd++;
             removeRanges.Add((token.StartIndex, tokenEnd));
             tokens.Remove(token);
@@ -598,22 +767,21 @@ public class SuggestingBox : ContentView
             isUpdatingText = true;
 
             string text = editor.Text ?? string.Empty;
+            RecordUndoSnapshot(text, editor.CursorPosition, UndoActionKind.Token, true);
             string before = text[..prefixStartIndex];
             int queryEnd = prefixStartIndex + currentPrefix.Length + currentQueryText.Length;
             string after = queryEnd < text.Length ? text[queryEnd..] : string.Empty;
 
             string tokenText = currentPrefix + chosenArgs.DisplayText;
 
-            var token = new SuggestionToken(
-                prefixStartIndex,
-                currentPrefix,
-                chosenArgs.DisplayText,
-                new SuggestionFormat
-                {
-                    BackgroundColor = chosenArgs.Format.BackgroundColor,
-                    ForegroundColor = chosenArgs.Format.ForegroundColor,
-                    Bold = chosenArgs.Format.Bold
-                }, chosenArgs.Item ?? selectedItem);
+            var suggestionFormat = new SuggestionFormat
+            {
+                BackgroundColor = chosenArgs.Format.BackgroundColor,
+                ForegroundColor = chosenArgs.Format.ForegroundColor,
+                Bold = chosenArgs.Format.Bold
+            };
+
+            var token = new SuggestionToken(prefixStartIndex, currentPrefix, chosenArgs.DisplayText, suggestionFormat, chosenArgs.Item ?? selectedItem);
 
             // Calculate the text length change for adjusting existing tokens
             int lengthDelta = tokenText.Length + 1 - (currentPrefix.Length + currentQueryText.Length);
@@ -980,6 +1148,7 @@ public class SuggestingBox : ContentView
     {
         if (bindable is not SuggestingBox suggestingBox || suggestingBox.isUpdatingText) return;
 
+        suggestingBox.ClearUndoHistory();
         suggestingBox.isUpdatingText = true;
         suggestingBox.editor.Text = newValue as string ?? string.Empty;
         suggestingBox.isUpdatingText = false;

@@ -34,6 +34,11 @@ internal static partial class TextFormatter
         foreach (var token in tokens)
         {
             if (token.StartIndex < 0 || token.EndIndex > text.Length) continue;
+            if (token.IsImage)
+            {
+                ApplyImageAttachment(attributedString, textView, token);
+                continue;
+            }
 
             var range = new NSRange(token.StartIndex, token.Length);
             var format = token.Format;
@@ -56,6 +61,41 @@ internal static partial class TextFormatter
         typingAttributes[UIStringAttributeKey.ForegroundColor] = foregroundColor;
         typingAttributes.Remove(UIStringAttributeKey.BackgroundColor);
         textView.TypingAttributes2 = typingAttributes;
+    }
+
+    private static void ApplyImageAttachment(NSMutableAttributedString attributedString, UITextView textView, SuggestionToken token)
+    {
+        if (token.ImageData.Length == 0) return;
+
+        using var data = NSData.FromArray(token.ImageData);
+        var image = UIImage.LoadFromData(data);
+        if (image is null) return;
+
+        var (width, height) = GetImageSize(token, image.Size.Width, image.Size.Height);
+        var attachment = new NSTextAttachment
+        {
+            Image = image,
+            Bounds = new CGRect(0, 0, width, height)
+        };
+
+        var attachmentString = NSAttributedString.FromAttachment(attachment);
+        attributedString.Replace(new NSRange(token.StartIndex, token.Length), attachmentString);
+    }
+
+    private static (double Width, double Height) GetImageSize(SuggestionToken token, double originalWidth, double originalHeight)
+    {
+        double width = token.WidthRequest;
+        double height = token.HeightRequest;
+
+        if (width > 0 && height <= 0) height = originalHeight * (width / originalWidth);
+        else if (height > 0 && width <= 0) width = originalWidth * (height / originalHeight);
+        else if (width <= 0 && height <= 0)
+        {
+            width = originalWidth;
+            height = originalHeight;
+        }
+
+        return (Math.Max(1, width), Math.Max(1, height));
     }
 
     internal static partial void ResetNativeText(Editor editor, string text, int cursorPosition)
@@ -86,8 +126,7 @@ internal static partial class TextFormatter
         if (nativeView.NumberOfSections() <= 0 || nativeView.Bounds.Width <= 0)
             return 0;
 
-        var layoutAttributes = nativeView.CollectionViewLayout.LayoutAttributesForElementsInRect(
-            new CGRect(0, 0, nativeView.Bounds.Width, nfloat.MaxValue));
+        var layoutAttributes = nativeView.CollectionViewLayout.LayoutAttributesForElementsInRect(new CGRect(0, 0, nativeView.Bounds.Width, nfloat.MaxValue));
         if (layoutAttributes is null || layoutAttributes.Length == 0)
             return 0;
 
@@ -130,59 +169,25 @@ internal static partial class TextFormatter
 
     internal static partial void SubscribeCursorChanged(Editor editor, Action<int, int> onCursorMoved) { }
     internal static partial void UnsubscribeCursorChanged(Editor editor) { }
-    private static readonly Dictionary<Editor, (UITextView textView, PasteInterceptor interceptor)>
+    internal static partial void SubscribeUndoHandler(Editor editor, Func<bool> onUndoRequested) { }
+    internal static partial void UnsubscribeUndoHandler(Editor editor) { }
+    private static readonly Dictionary<Editor, UITextView>
         pasteHandlers = [];
 
-    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[]> onImagePasted)
+    internal static partial void SubscribePasteHandler(Editor editor, Action<byte[], int> onImagePasteRequested)
     {
         if (editor.Handler?.PlatformView is not UITextView textView) return;
 
-        var interceptor = new PasteInterceptor(textView, onImagePasted);
-        pasteHandlers[editor] = (textView, interceptor);
+        if (textView is PasteAwareTextView pasteAwareTextView) pasteAwareTextView.OnImagePasted = onImagePasteRequested;
+
+        pasteHandlers[editor] = textView;
     }
 
     internal static partial void UnsubscribePasteHandler(Editor editor)
     {
-        if (!pasteHandlers.TryGetValue(editor, out var entry)) return;
-        entry.interceptor.Dispose();
+        if (!pasteHandlers.TryGetValue(editor, out var textView)) return;
+        if (textView is PasteAwareTextView pasteAwareTextView) pasteAwareTextView.OnImagePasted = null;
         pasteHandlers.Remove(editor);
-    }
-
-    private class PasteInterceptor : IDisposable
-    {
-        private readonly Action<byte[]> onImagePasted;
-        private readonly Foundation.NSObject notificationToken;
-
-        internal PasteInterceptor(UITextView textView, Action<byte[]> onImagePasted)
-        {
-            this.onImagePasted = onImagePasted;
-
-            notificationToken = NSNotificationCenter.DefaultCenter.AddObserver(
-                UITextView.TextDidChangeNotification, HandleTextChanged, textView);
-        }
-
-        private void HandleTextChanged(NSNotification notification)
-        {
-            var pasteboard = UIPasteboard.General;
-            if (!pasteboard.HasImages) return;
-
-            var image = pasteboard.Image;
-            if (image is null) return;
-
-            using var pngData = image.AsPNG();
-            if (pngData is null || pngData.Length == 0) return;
-
-            byte[] imageData = new byte[pngData.Length];
-            System.Runtime.InteropServices.Marshal.Copy(pngData.Bytes, imageData, 0, (int)pngData.Length);
-
-            onImagePasted(imageData);
-        }
-
-        public void Dispose()
-        {
-            if (notificationToken is not null)
-                NSNotificationCenter.DefaultCenter.RemoveObserver(notificationToken);
-        }
     }
 
     internal static partial double GetCursorBottomY(Editor editor)

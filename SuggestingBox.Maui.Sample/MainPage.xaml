@@ -85,7 +85,7 @@
                    FontAttributes="Bold" />
 
             <Label x:Name="ImageStatusLabel"
-                   Text="Paste an image into the editor to test"
+                   Text="Paste an image into the editor to request insertion"
                    TextColor="Gray"
                    FontSize="13" />
 

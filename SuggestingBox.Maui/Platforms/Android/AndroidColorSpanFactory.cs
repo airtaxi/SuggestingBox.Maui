@@ -16,43 +16,23 @@ internal static class AndroidColorSpanFactory
     {
         // Create via reflection using JNI to call the int constructor directly
         // This accesses the original Android Java API: BackgroundColorSpan(int color)
-        
-        var bgColorSpanHandle = JNIEnv.NewObject(
-            JNIEnv.FindClass("android/text/style/BackgroundColorSpan"),
-            JNIEnv.GetMethodID(
-                JNIEnv.FindClass("android/text/style/BackgroundColorSpan"),
-                "<init>",
-                "(I)V"  // Constructor that takes an int
-            ),
-            new JValue(colorArgb)
-        );
-        
-        var bgSpan = Java.Lang.Object.GetObject<BackgroundColorSpan>(
-            bgColorSpanHandle,
-            JniHandleOwnership.TransferLocalRef
-        );
-        
-        return bgSpan;
+
+        var backgroundColorSpanClass = JNIEnv.FindClass("android/text/style/BackgroundColorSpan");
+        var backgroundColorSpanConstructor = JNIEnv.GetMethodID(backgroundColorSpanClass, "<init>", "(I)V");
+        var backgroundColorSpanHandle = JNIEnv.NewObject(backgroundColorSpanClass, backgroundColorSpanConstructor, new JValue(colorArgb));
+        var backgroundColorSpan = Java.Lang.Object.GetObject<BackgroundColorSpan>(backgroundColorSpanHandle, JniHandleOwnership.TransferLocalRef);
+
+        return backgroundColorSpan;
     }
-    
+
     public static ForegroundColorSpan CreateForegroundColorSpan(int colorArgb)
     {
-        var fgColorSpanHandle = JNIEnv.NewObject(
-            JNIEnv.FindClass("android/text/style/ForegroundColorSpan"),
-            JNIEnv.GetMethodID(
-                JNIEnv.FindClass("android/text/style/ForegroundColorSpan"),
-                "<init>",
-                "(I)V"  // Constructor that takes an int
-            ),
-            new JValue(colorArgb)
-        );
-        
-        var fgSpan = Java.Lang.Object.GetObject<ForegroundColorSpan>(
-            fgColorSpanHandle,
-            JniHandleOwnership.TransferLocalRef
-        );
-        
-        return fgSpan;
+        var foregroundColorSpanClass = JNIEnv.FindClass("android/text/style/ForegroundColorSpan");
+        var foregroundColorSpanConstructor = JNIEnv.GetMethodID(foregroundColorSpanClass, "<init>", "(I)V");
+        var foregroundColorSpanHandle = JNIEnv.NewObject(foregroundColorSpanClass, foregroundColorSpanConstructor, new JValue(colorArgb));
+        var foregroundColorSpan = Java.Lang.Object.GetObject<ForegroundColorSpan>(foregroundColorSpanHandle, JniHandleOwnership.TransferLocalRef);
+
+        return foregroundColorSpan;
     }
 }
 
