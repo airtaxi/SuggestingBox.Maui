@@ -286,29 +286,29 @@ public class SuggestingBox : ContentView
         if (tokens.Count > 0) ScheduleFormatting();
     }
 
-    public void InsertImageToken(byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)
+    public void InsertImageToken(byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null, string tag = "")
     {
-        int cursorPosition = Math.Min(editor.CursorPosition, (editor.Text ?? string.Empty).Length);
-        InsertImageToken(cursorPosition, imageData, contentType, alternativeText, widthRequest, heightRequest, item);
+        var cursorPosition = Math.Min(editor.CursorPosition, (editor.Text ?? string.Empty).Length);
+        InsertImageToken(cursorPosition, imageData, contentType, alternativeText, widthRequest, heightRequest, item, tag);
     }
 
-    public void InsertImageToken(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)
+    public void InsertImageToken(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null, string tag = "")
     {
         ArgumentNullException.ThrowIfNull(imageData);
 
-        string text = editor.Text ?? string.Empty;
-        int insertIndex = NormalizeTokenInsertionIndex(startIndex, text);
+        var text = editor.Text ?? string.Empty;
+        var insertIndex = NormalizeTokenInsertionIndex(startIndex, text);
 
         RecordUndoSnapshot(text, insertIndex, UndoActionKind.Token, true);
         _isCustomUndoEnabled = true;
 
         foreach (var existingToken in tokens.Where(token => token.StartIndex >= insertIndex)) existingToken.StartIndex += SuggestingBoxText.ImagePlaceholderString.Length;
 
-        var imageToken = new SuggestionToken(insertIndex, imageData, contentType, alternativeText, widthRequest, heightRequest, item);
+        var imageToken = new SuggestionToken(insertIndex, imageData, contentType, alternativeText, widthRequest, heightRequest, item, tag);
         tokens.Add(imageToken);
 
-        string newText = text.Insert(insertIndex, SuggestingBoxText.ImagePlaceholderString);
-        int cursorPosition = insertIndex + imageToken.Length;
+        var newText = text.Insert(insertIndex, SuggestingBoxText.ImagePlaceholderString);
+        var cursorPosition = insertIndex + imageToken.Length;
 
         isUpdatingText = true;
         editor.Text = newText;
@@ -323,19 +323,19 @@ public class SuggestingBox : ContentView
 
     public void RaiseImagePasteRequested(byte[] imageData)
     {
-        int cursorPosition = Math.Min(editor.CursorPosition, (editor.Text ?? string.Empty).Length);
+        var cursorPosition = Math.Min(editor.CursorPosition, (editor.Text ?? string.Empty).Length);
         RaiseImagePasteRequested(imageData, cursorPosition);
     }
 
     private void RaiseImagePasteRequested(byte[] imageData, int cursorPosition)
     {
-        string contentType = ImageContentTypeDetector.Detect(imageData);
-        string text = editor.Text ?? string.Empty;
-        int normalizedCursorPosition = Math.Clamp(cursorPosition, 0, text.Length);
+        var contentType = ImageContentTypeDetector.Detect(imageData);
+        var text = editor.Text ?? string.Empty;
+        var normalizedCursorPosition = Math.Clamp(cursorPosition, 0, text.Length);
         var eventArgs = new ImagePasteRequestedEventArgs(imageData, contentType, normalizedCursorPosition);
         ImagePasteRequested?.Invoke(this, eventArgs);
         if (ImagePasteRequestedCommand is ICommand imagePasteRequestedCommand && imagePasteRequestedCommand.CanExecute(eventArgs)) imagePasteRequestedCommand.Execute(eventArgs);
-        if (eventArgs.InsertImageImmediately) InsertImageToken(eventArgs.CursorPosition, eventArgs.ImageData, eventArgs.ContentType, eventArgs.AlternativeText, eventArgs.WidthRequest, eventArgs.HeightRequest, eventArgs.Item);
+        if (eventArgs.InsertImageImmediately) InsertImageToken(eventArgs.CursorPosition, eventArgs.ImageData, eventArgs.ContentType, eventArgs.AlternativeText, eventArgs.WidthRequest, eventArgs.HeightRequest, eventArgs.Item, eventArgs.Tag);
     }
 
     private static (string Text, List<SuggestionToken> Tokens) NormalizeContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokenInfos)
@@ -357,7 +357,7 @@ public class SuggestingBox : ContentView
                     offset += SuggestingBoxText.ImagePlaceholderString.Length;
                 }
 
-                normalizedTokens.Add(new SuggestionToken(startIndex, tokenInfo.ImageData, tokenInfo.ContentType, tokenInfo.AlternativeText, tokenInfo.WidthRequest, tokenInfo.HeightRequest, tokenInfo.Item));
+                normalizedTokens.Add(new SuggestionToken(startIndex, tokenInfo.ImageData, tokenInfo.ContentType, tokenInfo.AlternativeText, tokenInfo.WidthRequest, tokenInfo.HeightRequest, tokenInfo.Item, tokenInfo.Tag));
                 continue;
             }
 
@@ -408,7 +408,8 @@ public class SuggestingBox : ContentView
                     || leftToken.ContentType != rightToken.ContentType
                     || leftToken.AlternativeText != rightToken.AlternativeText
                     || leftToken.WidthRequest != rightToken.WidthRequest
-                    || leftToken.HeightRequest != rightToken.HeightRequest)
+                    || leftToken.HeightRequest != rightToken.HeightRequest
+                    || leftToken.Tag != rightToken.Tag)
                 {
                     return false;
                 }

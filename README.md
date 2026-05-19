@@ -107,8 +107,8 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 |---|---|
 | `GetTokens()` | Returns `IReadOnlyList<SuggestingBoxTokenInfo>` of current tokens. |
 | `SetContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokens)` | Restores the editor with the given text and tokens. |
-| `InsertImageToken(byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)` | Inserts an image token at the current cursor position. If both size values are `-1`, the original image size is used. |
-| `InsertImageToken(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)` | Inserts an image token at the specified text position. If one size value is set, the other is inferred from the original aspect ratio. |
+| `InsertImageToken(byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null, string tag = "")` | Inserts an image token at the current cursor position. If both size values are `-1`, the original image size is used. |
+| `InsertImageToken(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null, string tag = "")` | Inserts an image token at the specified text position. If one size value is set, the other is inferred from the original aspect ratio. |
 
 #### Example: Extracting tokens with `GetTokens()`
 
@@ -130,6 +130,7 @@ SuggestingBoxControl.ImagePasteRequested += (sender, args) =>
     // Validate, resize, upload, or reject the image here.
     args.AlternativeText = "Pasted image";
     args.WidthRequest = 180;
+    args.Tag = "uploaded-image-id";
     args.InsertImageImmediately = true;
 };
 ```

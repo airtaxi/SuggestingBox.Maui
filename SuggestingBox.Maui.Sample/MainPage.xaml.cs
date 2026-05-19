@@ -64,6 +64,7 @@ public partial class MainPage : ContentPage
         PastedImage.IsVisible = true;
         args.AlternativeText = "Pasted image";
         args.WidthRequest = 180;
+        args.Tag = "sample-pasted-image";
         args.InsertImageImmediately = true;
     }
 
@@ -84,7 +85,7 @@ public partial class MainPage : ContentPage
 
     private static string FormatTokenInfo(SuggestingBoxTokenInfo token) =>
         token.Kind == SuggestingBoxTokenKind.Image
-            ? $"[{token.StartIndex}..{token.EndIndex}] image ({token.ContentType}, {token.ImageData.Length:N0} bytes)"
+            ? $"[{token.StartIndex}..{token.EndIndex}] image ({token.ContentType}, {token.ImageData.Length:N0} bytes, tag: {token.Tag})"
             : $"[{token.StartIndex}..{token.EndIndex}] {token.Prefix}{token.DisplayText}";
 
     private void OnSaveClicked(object sender, EventArgs eventArgs)

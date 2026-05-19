@@ -12,7 +12,7 @@ internal class SuggestionToken
         Item = item;
     }
 
-    internal SuggestionToken(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)
+    internal SuggestionToken(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null, string tag = "")
     {
         Kind = SuggestingBoxTokenKind.Image;
         StartIndex = startIndex;
@@ -22,6 +22,7 @@ internal class SuggestionToken
         WidthRequest = widthRequest;
         HeightRequest = heightRequest;
         Item = item;
+        Tag = tag ?? string.Empty;
     }
 
     internal SuggestionToken(SuggestingBoxTokenInfo tokenInfo)
@@ -37,6 +38,7 @@ internal class SuggestionToken
         AlternativeText = tokenInfo.AlternativeText ?? string.Empty;
         WidthRequest = tokenInfo.WidthRequest;
         HeightRequest = tokenInfo.HeightRequest;
+        Tag = tokenInfo.Tag ?? string.Empty;
     }
 
     public SuggestingBoxTokenKind Kind { get; }
@@ -50,6 +52,7 @@ internal class SuggestionToken
     public string AlternativeText { get; } = string.Empty;
     public double WidthRequest { get; } = -1;
     public double HeightRequest { get; } = -1;
+    public string Tag { get; } = string.Empty;
     public string FullText => Kind == SuggestingBoxTokenKind.Image
         ? SuggestingBoxText.ImagePlaceholderString
         : Prefix + DisplayText;
@@ -76,6 +79,7 @@ internal class SuggestionToken
             ContentType = ContentType,
             AlternativeText = AlternativeText,
             WidthRequest = WidthRequest,
-            HeightRequest = HeightRequest
+            HeightRequest = HeightRequest,
+            Tag = Tag
         };
 }

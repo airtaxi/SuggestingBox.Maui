@@ -68,4 +68,6 @@ foreach (var token in SuggestingBoxControl.GetTokens())
 
 `InsertImageToken(...)`의 `contentType`은 optional입니다. 생략하면 라이브러리가 이미지 bytes에서 일반적인 이미지 형식을 감지합니다.
 
+이미지 토큰에는 optional 문자열 `Tag`도 지정할 수 있습니다. `InsertImageToken(..., tag: "...")`, `SuggestingBoxTokenInfo.CreateImage(..., tag: "...")`, 또는 `ImagePasteRequestedEventArgs.Tag`를 사용할 수 있습니다.
+
 `widthRequest`와 `heightRequest`가 모두 `-1`이면 원본 이미지 크기를 사용합니다. 한쪽만 지정하면 원본 비율로 나머지를 계산합니다.

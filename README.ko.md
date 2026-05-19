@@ -107,8 +107,8 @@ SuggestingBoxControl.SuggestionChosen += (sender, args) =>
 |---|---|
 | `GetTokens()` | 현재 토큰 목록을 `IReadOnlyList<SuggestingBoxTokenInfo>`로 반환합니다. |
 | `SetContent(string text, IEnumerable<SuggestingBoxTokenInfo> tokens)` | 주어진 텍스트와 토큰으로 에디터 상태를 복원합니다. |
-| `InsertImageToken(byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)` | 현재 커서 위치에 이미지 토큰을 삽입합니다. 두 크기 값이 모두 `-1`이면 원본 이미지 크기를 사용합니다. |
-| `InsertImageToken(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null)` | 지정한 텍스트 위치에 이미지 토큰을 삽입합니다. 한쪽 크기만 지정하면 원본 비율로 나머지를 계산합니다. |
+| `InsertImageToken(byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null, string tag = "")` | 현재 커서 위치에 이미지 토큰을 삽입합니다. 두 크기 값이 모두 `-1`이면 원본 이미지 크기를 사용합니다. |
+| `InsertImageToken(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null, string tag = "")` | 지정한 텍스트 위치에 이미지 토큰을 삽입합니다. 한쪽 크기만 지정하면 원본 비율로 나머지를 계산합니다. |
 
 #### 예제: `GetTokens()`로 토큰 추출
 
@@ -130,6 +130,7 @@ SuggestingBoxControl.ImagePasteRequested += (sender, args) =>
     // 여기에서 이미지 검증, 리사이즈, 업로드, 거절 등을 결정합니다.
     args.AlternativeText = "Pasted image";
     args.WidthRequest = 180;
+    args.Tag = "uploaded-image-id";
     args.InsertImageImmediately = true;
 };
 ```

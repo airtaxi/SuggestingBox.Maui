@@ -14,7 +14,7 @@ public class SuggestingBoxTokenInfo
         Item = item;
     }
 
-    public static SuggestingBoxTokenInfo CreateImage(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null) =>
+    public static SuggestingBoxTokenInfo CreateImage(int startIndex, byte[] imageData, string contentType = null, string alternativeText = "", double widthRequest = -1, double heightRequest = -1, object item = null, string tag = "") =>
         new()
         {
             Kind = SuggestingBoxTokenKind.Image,
@@ -24,7 +24,8 @@ public class SuggestingBoxTokenInfo
             AlternativeText = alternativeText ?? string.Empty,
             WidthRequest = widthRequest,
             HeightRequest = heightRequest,
-            Item = item
+            Item = item,
+            Tag = tag ?? string.Empty
         };
 
     public SuggestingBoxTokenKind Kind { get; set; } = SuggestingBoxTokenKind.Mention;
@@ -38,6 +39,7 @@ public class SuggestingBoxTokenInfo
     public string AlternativeText { get; set; } = string.Empty;
     public double WidthRequest { get; set; } = -1;
     public double HeightRequest { get; set; } = -1;
+    public string Tag { get; set; } = string.Empty;
     public int Length => Kind == SuggestingBoxTokenKind.Image
         ? SuggestingBoxText.ImagePlaceholderString.Length
         : FullText.Length;

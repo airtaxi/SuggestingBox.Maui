@@ -68,4 +68,6 @@ foreach (var token in SuggestingBoxControl.GetTokens())
 
 `InsertImageToken(...)` accepts an optional `contentType`. When omitted, the library detects common image types from the image bytes.
 
+Image tokens can also carry an optional string `Tag`, either through `InsertImageToken(..., tag: "...")`, `SuggestingBoxTokenInfo.CreateImage(..., tag: "...")`, or `ImagePasteRequestedEventArgs.Tag`.
+
 If both `widthRequest` and `heightRequest` are `-1`, the original image size is used. If only one value is provided, the other is inferred from the original aspect ratio.
